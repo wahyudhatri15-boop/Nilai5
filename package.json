@@ -1,0 +1,23 @@
+{
+  "scripts": {
+    "start": "node server.js",
+    "dev": "cross-env NODE_ENV=development nodemon server.js",
+    "stop": "powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Write-Host 'Port 3000 dibebaskan.'\"",
+    "import-csv": "node scripts/import-csv.js",
+    "reset-seed": "node scripts/import-csv.js --reset",
+    "sync-supabase": "node scripts/sync-supabase.js",
+    "check-template": "node scripts/check-template.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "connect-livereload": "^0.6.1",
+    "cross-env": "^10.1.0",
+    "livereload": "^0.10.3",
+    "nodemon": "^3.1.14"
+  }
+}

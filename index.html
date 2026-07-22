@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cek Nilai & Kelengkapan Tugas Siswa - SiGrade</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Material Symbols (icon font) -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css?v=84">
+</head>
+<body>
+
+  <!-- Login Admin / Guru Modal -->
+  <div id="login-container" class="admin-login-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="admin-login-title">
+    <div class="admin-login-backdrop" onclick="cancelAdminLogin()"></div>
+    <div class="admin-login-card">
+      <button type="button" class="admin-login-close" onclick="cancelAdminLogin()" aria-label="Tutup">
+        <span class="material-symbols-rounded">close</span>
+      </button>
+
+      <div class="admin-login-header">
+        <div class="admin-login-icon">
+          <span class="material-symbols-rounded">shield_person</span>
+        </div>
+        <h2 id="admin-login-title">Masuk Mode Guru</h2>
+        <p class="admin-login-subtitle">Autentikasi admin diperlukan untuk mengakses panel guru SiGrade.</p>
+      </div>
+
+      <div id="login-error" class="admin-login-error" role="alert" style="display:none;">
+        <span class="material-symbols-rounded">error</span>
+        <span id="login-error-text"></span>
+      </div>
+
+      <form id="login-form" class="admin-login-form" novalidate>
+        <div class="admin-login-field">
+          <label for="login-email">Email Admin</label>
+          <div class="admin-login-input-wrap">
+            <span class="material-symbols-rounded admin-login-input-icon">mail</span>
+            <input type="email" id="login-email" placeholder="nama@sekolah.id" required autocomplete="email">
+          </div>
+        </div>
+
+        <div class="admin-login-field">
+          <label for="login-password">Password</label>
+          <div class="admin-login-input-wrap">
+            <span class="material-symbols-rounded admin-login-input-icon">lock</span>
+            <input type="password" id="login-password" placeholder="Masukkan password" required autocomplete="current-password">
+            <button type="button" class="admin-login-toggle-pw" id="login-toggle-pw" aria-label="Tampilkan password" tabindex="-1">
+              <span class="material-symbols-rounded" id="login-toggle-pw-icon">visibility</span>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="admin-login-submit" id="login-submit-btn">
+          <span class="admin-login-submit-text">Masuk sebagai Admin</span>
+          <span class="admin-login-spinner" id="login-spinner" style="display:none;"></span>
+        </button>
+      </form>
+
+      <button type="button" class="admin-login-back" onclick="cancelAdminLogin()">
+        <span class="material-symbols-rounded">arrow_back</span>
+        Kembali ke tampilan siswa
+      </button>
+    </div>
+  </div>
+
+  <div class="app-layout">
+    <!-- Sidebar Navigasi di Sisi Paling Kiri -->
+    <aside id="app-sidebar" class="app-sidebar">
+      <div class="sidebar-inner">
+        <div class="sidebar-brand" onclick="toggleAppSidebar(event)" style="cursor: pointer;" title="Buka/Tutup Sidebar Navigasi">
+          <div class="logo-icon"><span class="material-symbols-rounded" style="font-size: 1.4rem;">grading</span></div>
+        </div>
+
+
+        <nav class="sidebar-nav">
+          <!-- Item 1: Dashboard -->
+          <div class="sidebar-nav-item active" data-tab="dashboard" onclick="switchSidebarView(appState.currentView === 'guru' ? 'guru' : 'siswa', 'dashboard')">
+            <span class="nav-icon"><span class="material-symbols-rounded">dashboard</span></span>
+            <span class="nav-label">Dashboard</span>
+            <span class="sidebar-tooltip">Dashboard</span>
+          </div>
+
+          <!-- Item 2: Direktori Siswa -->
+          <div class="sidebar-nav-item" data-view="guru" data-tab="nilai" onclick="switchSidebarView('guru', 'nilai')">
+            <span class="nav-icon"><span class="material-symbols-rounded">people</span></span>
+            <span class="nav-label">Direktori Siswa</span>
+            <span class="sidebar-tooltip">Direktori Siswa</span>
+          </div>
+
+          <!-- Item: Direktori Tugas -->
+          <div class="sidebar-nav-item" data-view="guru" data-tab="direktori-tugas" onclick="switchSidebarView('guru', 'direktori-tugas')">
+            <span class="nav-icon"><span class="material-symbols-rounded">folder_open</span></span>
+            <span class="nav-label">Direktori Tugas</span>
+            <span class="sidebar-tooltip">Direktori Tugas</span>
+          </div>
+
+          <!-- Item: Direktori Nilai (NEW) -->
+          <div class="sidebar-nav-item" data-view="guru" data-tab="direktori-nilai" onclick="switchSidebarView('guru', 'direktori-nilai')">
+            <span class="nav-icon"><span class="material-symbols-rounded">account_tree</span></span>
+            <span class="nav-label">Direktori Nilai</span>
+            <span class="sidebar-tooltip">Direktori Nilai</span>
+          </div>
+
+          <!-- Item 3: Tugas Daring -->
+          <div class="sidebar-nav-item" data-view="guru" data-tab="tugas-daring" onclick="switchSidebarView('guru', 'tugas-daring')">
+            <span class="nav-icon"><span class="material-symbols-rounded">assignment</span></span>
+            <span class="nav-label">Tugas Daring</span>
+            <span class="sidebar-tooltip">Tugas Daring</span>
+          </div>
+
+
+          <!-- Item 4: Ujian CBT -->
+          <div class="sidebar-nav-item" data-view="guru" data-tab="ujian-cbt" onclick="switchSidebarView('guru', 'ujian-cbt')">
+            <span class="nav-icon"><span class="material-symbols-rounded">quiz</span></span>
+            <span class="nav-label">Ujian CBT</span>
+            <span class="sidebar-tooltip">Ujian CBT</span>
+          </div>
+
+
+          <!-- Item 5: Pengaturan -->
+          <div class="sidebar-nav-item" data-view="guru" data-tab="config" onclick="switchSidebarView('guru', 'config')">
+            <span class="nav-icon"><span class="material-symbols-rounded">settings</span></span>
+            <span class="nav-label">Pengaturan</span>
+            <span class="sidebar-tooltip">Pengaturan</span>
+          </div>
+        </nav>
+        
+        <!-- Logout Button -->
+        <div class="sidebar-nav-item" onclick="handleLogout()" style="margin-top: auto; color: #ff5555;">
+          <span class="nav-icon"><span class="material-symbols-rounded">logout</span></span>
+          <span class="nav-label">Logout</span>
+          <span class="sidebar-tooltip">Logout</span>
+        </div>
+
+        <!-- Sidebar Class Filter Section (shown only in teacher-nilai view) -->
+        <div id="sidebar-class-section" class="sidebar-class-section" style="display:none;">
+          <div id="sidebar-semua-kelas-container">
+            <!-- Dynamic 'Semua Kelas' button rendered via JS -->
+          </div>
+          <div class="sidebar-class-search">
+            <span class="sidebar-search-icon"><span class="material-symbols-rounded">search</span></span>
+            <input type="text" id="sidebar-search-input" placeholder="Cari nama..." class="sidebar-search-field">
+          </div>
+          <div id="sidebar-class-tabs" class="sidebar-class-tabs">
+            <!-- Dynamic class buttons rendered via JS (8C top → 8G bottom) -->
+          </div>
+        </div>
+
+        <!-- Sidebar Footer Section -->
+        <div class="sidebar-footer" style="margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+          <span class="sidebar-footer-text">&copy; 2026 SiGrade Portal</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; justify-content: center; width: 100%;">
+            <span class="sidebar-footer-version">Versi 5.0.0</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="main-wrapper" id="app-main-wrapper">
+      <!-- Navigation Header -->
+      <header>
+        <!-- Mobile Sidebar Toggle -->
+        <button id="mobile-sidebar-toggle" class="icon-btn" onclick="toggleAppSidebar(event)" aria-label="Buka Menu">
+          <span class="material-symbols-rounded">menu</span>
+        </button>
+
+        <!-- Header Teacher Stats Bar (Visible only to logged in Teacher in 1 compact row) -->
+        <div id="header-teacher-stats" class="header-stats-strip d-none">
+          <div class="header-stat-item">
+            <span class="header-stat-icon blue"><span class="material-symbols-rounded">group</span></span>
+            <div class="header-stat-details">
+              <span class="header-stat-label">Siswa</span>
+              <span id="stat-total-students" class="header-stat-value">0</span>
+            </div>
+          </div>
+          <div class="header-stat-item clickable" onclick="openAveragesAnalyticsModal()" title="Klik untuk melihat grafik rata-rata nilai kelas">
+            <span class="header-stat-icon purple"><span class="material-symbols-rounded">trending_up</span></span>
+            <div class="header-stat-details">
+              <span class="header-stat-label">Rata-rata</span>
+              <span id="stat-class-average" class="header-stat-value">0.0</span>
+            </div>
+          </div>
+          <div class="header-stat-item clickable" onclick="openCompletenessAuditModal()" title="Klik untuk melakukan audit kelengkapan tugas">
+            <span class="header-stat-icon green"><span class="material-symbols-rounded">task_alt</span></span>
+            <div class="header-stat-details">
+              <span class="header-stat-label">Lengkap</span>
+              <span id="stat-class-completeness" class="header-stat-value">0%</span>
+            </div>
+          </div>
+          <div class="header-stat-item clickable" onclick="openCompletenessAuditModal()" title="Klik untuk melihat siswa dengan tugas belum lengkap">
+            <span class="header-stat-icon red"><span class="material-symbols-rounded">warning</span></span>
+            <div class="header-stat-details">
+              <span class="header-stat-label">Blm Lengkap</span>
+              <span id="stat-incomplete-students" class="header-stat-value">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Toggle between Student and Teacher view & other control buttons -->
+        <div class="header-controls">
+          <!-- Term Indicator -->
+          <div id="active-term-indicator" style="display: inline-flex; align-items: center; gap: 0.45rem; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); padding: 0 12px; border-radius: var(--r-xl); height: 32px; flex-shrink: 0;">
+            <span class="material-symbols-rounded" style="color: var(--indigo); font-size: 15px; font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;">calendar_month</span>
+            <span id="active-term-label" style="color: var(--indigo); font-weight: 700; font-size: 0.78rem; font-family: var(--font-body);">2026/2027 - Ganjil (I)</span>
+          </div>
+
+          <!-- Export Excel Button moved to Direktori Nilai -->
+          <!-- Publish Grades Toggle -->
+          <div id="publish-grades-toggle-container" class="hdr-pill-toggle d-none">
+            <label class="toggle-switch">
+              <input type="checkbox" id="publish-grades-toggle-input" onchange="toggleGradePublication()">
+              <span class="toggle-slider"></span>
+            </label>
+            <span id="publish-grades-status-label" class="hdr-pill-label">Nilai Tampil</span>
+          </div>
+
+          <div class="mode-toggle-group">
+            <button class="toggle-btn active" data-view="siswa">
+              <span class="material-symbols-rounded">school</span>
+              <span>Siswa</span>
+            </button>
+            <button class="toggle-btn" data-view="guru" id="teacher-view-toggle-btn">
+              <span class="material-symbols-rounded">person_4</span>
+              <span>Guru</span>
+            </button>
+          </div>
+
+
+
+          <!-- Logout Button -->
+          <button id="header-logout-btn" class="action-btn danger-btn d-none" onclick="logoutTeacher()">
+            <span class="material-symbols-rounded">lock</span>
+            Keluar
+          </button>
+        </div>
+      </header>
+
+  <!-- Main Container -->
+  <main>
+
+    <!-- ==============================================
+         STUDENT VIEW SECTION
+         ============================================== -->
+    <section id="siswa-view" class="view-section active">
+      
+      <!-- Search Banner -->
+      <div class="student-search-section">
+        <h1>Cek Status Kelengkapan & Nilai Tugas</h1>
+        <p>Pilih kelas dan nama Anda di bawah ini untuk mengakses laporan belajar lengkap.</p>
+        
+        <!-- Dynamic Island Selector Bar -->
+        <div class="student-selector-bar">
+          <div class="selector-field" id="class-dropdown-wrapper">
+            <div class="di-dropdown-trigger" id="class-dropdown-trigger" onclick="toggleDiDropdown('class')">
+              <span class="di-trigger-icon"><span class="material-symbols-rounded">class</span></span>
+              <span class="di-trigger-label placeholder" id="class-trigger-label">Pilih Kelas</span>
+              <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
+            </div>
+            <select id="student-class-select" class="premium-select">
+              <option value="">Pilih Kelas</option>
+            </select>
+          </div>
+          <div class="selector-divider"></div>
+          <div class="selector-field" id="name-dropdown-wrapper">
+            <div class="di-dropdown-trigger disabled" id="name-dropdown-trigger" onclick="toggleDiDropdown('name')">
+              <span class="di-trigger-icon"><span class="material-symbols-rounded">person</span></span>
+              <span class="di-trigger-label placeholder" id="name-trigger-label">Pilih Nama Siswa</span>
+              <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
+            </div>
+            <select id="student-name-select" class="premium-select" disabled>
+              <option value="">Pilih Nama Siswa</option>
+            </select>
+          </div>
+          
+        </div>
+
+
+        <!-- Placeholder Empty State (Kept for JS logic, styled invisibly by default) -->
+        <div id="student-placeholder-area" class="student-placeholder-clean">
+          <div class="clean-placeholder-tip">
+            <span class="material-symbols-rounded" style="font-size: 16px; color: var(--text-muted);">info</span>
+            <span>Silakan pilih kelas dan nama Anda di atas.</span>
+          </div>
+        </div>
+
+        <!-- Hidden search elements for JS compatibility -->
+        <input type="hidden" id="student-search-input" value="">
+        <button id="student-search-btn" style="display:none;"></button>
+      </div>
+
+      <!-- Result Panel (Wrapper, hidden by default) -->
+      <div id="student-results-area" class="d-none">
+
+        <!-- Student View Sub-Tabs V7 (Pill Style iOS Look) -->
+        <div style="text-align: center; margin-bottom: 1.25rem;">
+          <div class="student-sub-tab-nav">
+            <button class="student-sub-tab-btn active" onclick="switchStudentSubTab('laporan')" id="btn-subtab-laporan">
+              <span class="material-symbols-rounded" style="font-size:16px;">bar_chart</span> Laporan Belajar
+            </button>
+            <button class="student-sub-tab-btn" onclick="switchStudentSubTab('portal')" id="btn-subtab-portal">
+              <span class="material-symbols-rounded" style="font-size:16px;">smartphone</span> Portal Tugas & CBT
+            </button>
+            <button class="student-sub-tab-btn" onclick="switchStudentSubTab('direktori')" id="btn-subtab-direktori">
+              <span class="material-symbols-rounded" style="font-size:16px;">folder_open</span> Direktori Tugas
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab Content 1: Laporan Belajar (Premium Block Container) -->
+        <div id="student-laporan-content" style="animation: fadeIn var(--transition-normal) forwards;">
+          
+          <!-- Layout Grid 2-Kolom: Sidebar di kiri, Grades di kanan -->
+          <div class="student-laporan-grid">
+            
+            <!-- Left Column: Student Info & Completion circular progress (Atas di Mobile) -->
+            <div class="student-profile-sidebar">
+              
+              <!-- Profile General Card -->
+              <div class="glass-card" style="padding: 0;">
+                <div class="profile-avatar-container">
+                  <div id="res-avatar" class="avatar-circle">AS</div>
+                  <h2 id="res-name" class="profile-name">Ahmad Syarifudin</h2>
+                  <div id="res-details" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; display: flex; gap: 0.5rem; justify-content: center; font-weight: 600;">
+                    <!-- Filled dynamically via JS -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Circular Progress Card + Micro-copy Dinamis -->
+              <div class="glass-card" id="res-progress-card">
+                <h3 style="font-family: var(--font-heading); font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem; text-align: center;">Kelengkapan Tugas</h3>
+                <div class="progress-ring-container">
+                  <div class="progress-ring-wrapper">
+                    <svg class="progress-ring-svg">
+                      <defs>
+                        <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stop-color="#ef4444" id="grad-stop-1" />
+                          <stop offset="100%" stop-color="#f59e0b" id="grad-stop-2" />
+                        </linearGradient>
+                      </defs>
+                      <circle class="progress-ring-bg" cx="70" cy="70" r="60"></circle>
+                      <circle id="res-progress-circle" class="progress-ring-circle" cx="70" cy="70" r="60"></circle>
+                    </svg>
+                    <div class="progress-ring-text">
+                      <span id="res-progress-pct" class="progress-pct">0%</span>
+                      <span class="progress-label">Selesai</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Poin 3: Gamifikasi Progress Ring & Micro-copy Dinamis -->
+                <p id="res-progress-microcopy" style="font-size: 0.78rem; text-align: center; color: var(--text-secondary); margin-top: 1rem; font-weight: 600; line-height: 1.4;">
+                  Menunggu data pemuatan...
+                </p>
+              </div>
+
+            </div>
+
+            <!-- Middle Column: Alert Banner & Detailed Grades (Laporan Kelengkapan & Hasil Belajar) -->
+            <div class="student-laporan-center">
+              
+              <!-- Poin 7: Prominent Alert Banner Horizontal Hero -->
+              <div id="res-status-card" class="status-banner-hero incomplete" style="margin-bottom: 1.5rem !important;">
+                <!-- Content filled dynamically via JS -->
+              </div>
+
+              <!-- KKM Warning Banner (shown when student has below-KKM grades) -->
+              <div id="res-kkm-warning" style="display:none; margin-bottom: 1.5rem;"></div>
+
+              <!-- Subject Card Accordion Wrapper -->
+              <div class="glass-card" id="res-laporan-card" style="padding: 1.5rem;">
+                <div class="section-header" style="margin-bottom: 1.25rem;">
+                  <h2>Laporan Kelengkapan & Hasil Belajar</h2>
+                  <div class="grades-summary-ribbon">
+                    <div class="ribbon-item">
+                      <span class="ribbon-dot complete"></span> Lengkap
+                    </div>
+                    <div class="ribbon-item">
+                      <span class="ribbon-dot incomplete"></span> Belum Lengkap
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Subject Cards Grid (Accordion Mode) -->
+                <div id="res-subject-grid" class="subject-grid">
+                  <!-- Content filled dynamically via JS -->
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Right Column: To-Do List (Tugas yang Harus Segera Kamu Selesaikan) -->
+            <div class="student-laporan-right">
+              
+              <!-- Poin 1: Fitur "To-Do List" Otomatis -->
+              <div id="res-todo-card" class="glass-card student-todo-card" style="display: none;">
+                <h3>
+                  <span class="material-symbols-rounded">checklist</span> Tugas perlu diselesaikan
+                </h3>
+                <div id="res-todo-list" class="todo-list-wrapper">
+                  <!-- Dinamis diisi lewat JS -->
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Tab Content 2: Portal Tugas & Ujian CBT HP V7 -->
+        <div id="student-portal-content" class="d-none" style="animation: fadeIn var(--transition-normal) forwards;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+            
+
+            <!-- Tugas Daring Aktif Card -->
+            <div class="glass-card" style="padding: 1.5rem;">
+              <h3 style="font-family: var(--font-heading); font-weight: 700; font-size: 1.2rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; color: var(--secondary);">
+                <span class="material-symbols-rounded" style="font-size:22px;">assignment</span> Tugas Daring Aktif
+              </h3>
+              <div id="student-online-assignments-list" style="display: flex; flex-direction: column; gap: 1rem;">
+                <!-- Filled dynamically via JS -->
+              </div>
+            </div>
+            
+            <!-- Ujian CBT HP Card -->
+            <div class="glass-card" style="padding: 1.5rem;">
+              <h3 style="font-family: var(--font-heading); font-weight: 700; font-size: 1.2rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; color: var(--primary);">
+                <span class="material-symbols-rounded" style="font-size:22px;">quiz</span> Ujian CBT HP Aktif
+              </h3>
+              <div id="student-online-exams-list" style="display: flex; flex-direction: column; gap: 1rem;">
+                <!-- Filled dynamically via JS -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Tab Content 3: Direktori Tugas Kurikulum (Murid - Read Only) -->
+        <div id="student-direktori-content" class="d-none" style="animation: fadeIn var(--transition-normal) forwards;">
+          <div class="dashboard-layout" style="min-height: 60vh;">
+            <div class="teacher-directory-pane" id="student-curriculum-left-pane">
+              <div class="directory-toolbar" style="margin-bottom: 0.75rem;">
+                <h3 style="font-family: var(--font-heading); font-weight: 800; font-size: 0.95rem; margin: 0; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
+                  <span class="material-symbols-rounded" style="font-size: 18px; color: var(--indigo);">folder_open</span> Direktori Tugas Kurikulum
+                </h3>
+                <div style="margin-top: 0.5rem; width: 100%;">
+                  <label style="font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">MATA PELAJARAN:</label>
+                  <select id="student-curriculum-subject-select" class="filter-select" style="width: 100%; height: 32px; font-size: 0.75rem;" onchange="renderStudentCurriculumDirectory()"></select>
+                </div>
+              </div>
+              <div id="student-curriculum-list" style="overflow-y: auto; flex: 1; padding-right: 4px; display: flex; flex-direction: column; gap: 0.25rem;"></div>
+            </div>
+            <div class="teacher-detail-pane" id="student-curriculum-detail" style="overflow-y: auto;">
+              <div style="text-align:center; color:var(--text-muted); font-size:0.85rem; padding:3rem 1rem;">
+                <span class="material-symbols-rounded" style="font-size:48px; opacity:0.3; display:block; margin-bottom:0.75rem;">menu_book</span>
+                Pilih tugas dari daftar di sebelah kiri untuk melihat materi dan petunjuk pengerjaan.
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+
+      </div>
+
+    </section>
+
+    <!-- ==============================================
+         TEACHER VIEW SECTION (PASSWORD PROTECTED)
+         ============================================== -->
+    <section id="guru-view" class="view-section">
+
+
+
+      <!-- ==================== TAB 0: DASHBOARD GURU ==================== -->
+      <div id="teacher-tab-dashboard" class="teacher-tab-content" style="padding: 1.25rem; overflow-y: auto;">
+        
+        <!-- Header Section -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2 id="teacher-dashboard-greeting" style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 300; margin: 0 0 0.25rem 0;">Selamat Datang, <strong style="font-weight: 800; color: var(--primary);">Guru</strong></h2>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Status akademik hari ini untuk semua kelas Anda.</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.75rem;">
+              <div style="display: flex; flex-direction: column; text-align: center;">
+                <span id="teacher-dashboard-date-day" style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: var(--indigo);">OKT</span>
+                <span id="teacher-dashboard-date-num" style="font-size: 1.4rem; font-weight: 800; line-height: 1;">24</span>
+              </div>
+              <div style="border-left: 1px solid var(--border-color); padding-left: 0.75rem;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary);">Semester Aktif</div>
+                <div style="font-size: 0.7rem; color: var(--text-secondary);">Tahun Ajaran Berjalan</div>
+              </div>
+              <span class="material-symbols-rounded" style="color: var(--text-muted); font-size: 18px; margin-left: 0.5rem;">calendar_today</span>
+            </div>
+          </div>
+        </div>
+
+
+
+        
+        <!-- Rank and Attention List per Class -->
+        <div id="td-per-class-container" style="display: flex; flex-direction: row; overflow-x: auto; gap: 1rem; padding-bottom: 2rem;">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- ==================== TAB 1: NILAI SISWA ==================== -->
+      <div id="teacher-tab-nilai" class="teacher-tab-content" style="padding: 1.25rem; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <div style="flex: 1;">
+            <!-- Metrics Cards -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; max-width: 800px;">
+              <!-- Card 1: Siswa -->
+              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
+                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center;">
+                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--indigo);">groups</span>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Siswa</span>
+                  <span id="td-metric-siswa" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0</span>
+                </div>
+              </div>
+              
+              <!-- Card 2: Rata-Rata -->
+              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
+                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(168, 85, 247, 0.15); display: flex; align-items: center; justify-content: center;">
+                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--violet);">trending_up</span>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Rata-Rata</span>
+                  <span id="td-metric-rata" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0.0</span>
+                </div>
+              </div>
+
+              <!-- Card 3: Lengkap -->
+              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
+                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); display: flex; align-items: center; justify-content: center;">
+                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--success);">check_circle</span>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Lengkap</span>
+                  <div style="display: flex; align-items: baseline; gap: 0.1rem;">
+                    <span id="td-metric-tugas" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0</span>
+                    <span style="font-size: 0.9rem; font-weight: 800; color: var(--text-primary);">%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 4: Blm Lengkap -->
+              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
+                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(244, 63, 94, 0.15); display: flex; align-items: center; justify-content: center;">
+                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--danger);">error</span>
+                </div>
+                <div style="display: flex; flex-direction: column;">
+                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Blm Lengkap</span>
+                  <span id="td-metric-belum" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <button onclick="exportGradesToExcel()" class="ui-outline-btn">
+              <span class="material-symbols-rounded" style="font-size: 16px;">table_chart</span>
+              Ekspor Excel
+            </button>
+          </div>
+        </div>
+
+        <!-- Split Layout workspace V7 -->
+        <div class="dashboard-layout">
+          
+          <!-- SISI KIRI: DIRECTORY LIST -->
+          <div class="teacher-directory-pane" id="teacher-left-pane">
+            
+            <div class="directory-toolbar">
+              
+              <!-- Toolbar Top Row -->
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="font-family: var(--font-heading); font-weight: 800; font-size: 0.9rem; margin: 0; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
+                  <span class="material-symbols-rounded" style="font-size: 17px; color: var(--indigo); font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;">people</span> Direktori Siswa
+                </h3>
+                <button class="action-btn" id="teacher-add-student-btn" onclick="openAddStudentModal()" style="padding: 0.25rem 0.6rem; font-size: 0.7rem; height: 26px; background: var(--primary-grad); display: flex; align-items: center; gap: 0.15rem; border-radius: 6px; box-shadow: none;">
+                  <span class="material-symbols-rounded" style="font-size: 13px;">add</span> Tambah
+                </button>
+              </div>
+              
+              <!-- Toolbar Bottom: Search & Filter -->
+              <div style="display: flex; gap: 0.35rem; align-items: center;">
+                <div class="toolbar-search" style="flex: 1;">
+                  <span class="search-icon"><span class="material-symbols-rounded">search</span></span>
+                  <input type="text" id="teacher-search-input" placeholder="Cari siswa..." style="width: 100%; height: 32px; font-size: 0.76rem;">
+                </div>
+                <select id="teacher-filter-select" class="filter-select" style="width: 120px; height: 32px; font-size: 0.72rem; padding: 0 0.35rem; flex-shrink: 0;">
+                  <option value="all">Semua</option>
+                  <option value="complete">Lengkap</option>
+                  <option value="incomplete">Belum</option>
+                </select>
+              </div>
+
+              <!-- Class tabs container -->
+              <div id="teacher-class-tabs" class="teacher-class-tabs"></div>
+
+            </div>
+
+            <!-- Student Table -->
+            <div class="table-responsive-wrapper">
+              <table class="student-table" id="directory-table">
+                <thead>
+                  <tr>
+                    <!-- Dynamic Headers rendered via JS -->
+                  </tr>
+                </thead>
+                <tbody id="student-table-body">
+                  <!-- Content filled dynamically via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SISI KANAN: DYNAMIC CONTENT PANEL -->
+          <div class="teacher-detail-pane" id="teacher-right-pane">
+            
+            <!-- DEFAULT STATE: Overview Dashboard (Shown if appState.selectedStudentId === null) -->
+            <div id="teacher-right-default-pane" style="display: flex; flex-direction: column; gap: 1rem; height: 100%;">
+              
+              <!-- Welcome Hero — Minimal -->
+              <div style="text-align: center; padding: 1.5rem 1.25rem; background: linear-gradient(160deg, rgba(99,102,241,0.05) 0%, rgba(20,23,34,0.8) 100%); border: 1px solid rgba(99,102,241,0.1); border-radius: var(--radius-sm); position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 1.5px; background: linear-gradient(90deg, transparent, #6366f1, #06b6d4, transparent); opacity: 0.6;"></div>
+                <span class="material-symbols-rounded" style="font-size: 2rem; font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 0, 'opsz' 48; color: var(--indigo); filter: drop-shadow(0 2px 8px rgba(99,102,241,0.3)); display: block; margin-bottom: 0.5rem;">co_present</span>
+                <h3 style="font-family: var(--font-heading); font-weight: 700; font-size: 0.95rem; color: var(--text-primary); margin-bottom: 0.3rem;">Pusat Kelola Nilai</h3>
+                <p style="color: var(--text-secondary); font-size: 0.72rem; max-width: 260px; margin: 0 auto; line-height: 1.5;">
+                  Pilih siswa di direktori untuk mengedit nilai materi bab secara langsung.
+                </p>
+              </div>
+
+              <!-- Pending Tasks Widget -->
+              <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); margin-bottom: 0.5rem;">
+                  <span style="font-family: var(--font-heading); font-weight: 700; color: var(--text-primary); font-size: 0.82rem; display: flex; align-items: center; gap: 0.35rem;">
+                    <span class="material-symbols-rounded" style="font-size: 16px; color: #f59e0b; font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 20;">pending_actions</span> Tugas Belum Selesai
+                  </span>
+                  <span style="font-size: 0.6rem; background: rgba(245,158,11,0.08); color: #d4a053; padding: 2px 7px; border-radius: 4px; font-weight: 700;">Perlu Tindakan</span>
+                </div>
+                
+                <!-- Incomplete Students list -->
+                <div id="incomplete-students-list" class="incomplete-students-list" style="flex: 1; overflow-y: auto; min-height: 0;">
+                  <!-- Dynamic items inserted here -->
+                </div>
+              </div>
+
+              <!-- Quick Guide Card -->
+              <div style="background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.04); padding: 0.85rem; border-radius: var(--radius-sm); flex-shrink: 0;">
+                <h4 style="font-family: var(--font-heading); font-weight: 700; font-size: 0.72rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.3rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">
+                  <span class="material-symbols-rounded" style="font-size: 14px; color: var(--indigo);">lightbulb</span> Panduan Cepat
+                </h4>
+                <ul style="font-size: 0.7rem; color: var(--text-muted); padding: 0; line-height: 1.55; display: flex; flex-direction: column; gap: 0.25rem; list-style: none;">
+                  <li style="display: flex; gap: 0.35rem; align-items: flex-start;"><span style="color: var(--indigo); font-size: 0.6rem; margin-top: 2px; flex-shrink:0;">●</span><span><strong style="color: var(--text-secondary);">Entri Nilai</strong> — Klik kolom input di panel detail, masukkan angka.</span></li>
+                  <li style="display: flex; gap: 0.35rem; align-items: flex-start;"><span style="color: var(--emerald); font-size: 0.6rem; margin-top: 2px; flex-shrink:0;">●</span><span><strong style="color: var(--text-secondary);">Kelengkapan</strong> — Toggle sakelar mapel untuk approve status.</span></li>
+                  <li style="display: flex; gap: 0.35rem; align-items: flex-start;"><span style="color: var(--amber); font-size: 0.6rem; margin-top: 2px; flex-shrink:0;">●</span><span><strong style="color: var(--text-secondary);">Katrol KKM</strong> — Nilai di bawah batas ditandai badge otomatis.</span></li>
+                </ul>
+              </div>
+
+            </div>
+
+
+            <!-- ACTIVE DETAIL STATE: Student Detail Editor Panel (Shown if appState.selectedStudentId !== null) -->
+            <div id="teacher-right-detail-pane" style="display: none; flex-direction: column; gap: 0.4rem; height: 100%;">
+              <!-- Dynamic Content rendered via renderTeacherRightPane() inside app.js -->
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ==================== TAB GURU: DIREKTORI TUGAS ==================== -->
+      <div id="teacher-tab-direktori-tugas" class="teacher-tab-content" style="padding: 1.25rem;">
+        <div class="dashboard-layout">
+          
+          <!-- SISI KIRI: DAFTAR BAB & TUGAS -->
+          <div class="teacher-directory-pane" id="tasks-dir-left-pane">
+            <div class="directory-toolbar" style="margin-bottom: 0.75rem;">
+              <h3 style="font-family: var(--font-heading); font-weight: 800; font-size: 0.95rem; margin: 0; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
+                <span class="material-symbols-rounded" style="font-size: 18px; color: var(--indigo);">folder_open</span> Direktori Tugas Kurikulum
+              </h3>
+              <!-- Subject Select for Tasks Directory -->
+              <div style="margin-top: 0.5rem; width: 100%; display: flex; gap: 0.5rem;">
+                <div style="flex: 1;">
+                  <label style="font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">MATA PELAJARAN:</label>
+                  <select id="tasks-dir-subject-select" class="filter-select" style="width: 100%; height: 32px; font-size: 0.75rem;" onchange="renderTasksDirectoryTab()"></select>
+                </div>
+                <div style="flex: 1;">
+                  <label style="font-size: 0.65rem; font-weight: 700; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">KELAS:</label>
+                  <select id="tasks-dir-class-select" class="filter-select" style="width: 100%; height: 32px; font-size: 0.75rem;" onchange="renderTasksDirectoryTab()"></select>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Dynamic Chapters & Tasks list container -->
+            <div id="tasks-dir-list-container" style="overflow-y: auto; flex: 1; padding-right: 4px; display: flex; flex-direction: column; gap: 0.25rem;">
+              <!-- Filled dynamically via renderTasksDirectoryTab() -->
+            </div>
+          </div>
+
+          <!-- SISI KANAN: PENGELOLA SOAL / PREVIEW / JAWABAN -->
+          <div class="teacher-detail-pane" id="tasks-dir-right-pane" style="overflow-y: auto;">
+            <!-- Rendered dynamically: default welcome pane, detail view, or editor workspace -->
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ==============================================
+           TEACHER TAB: DIREKTORI NILAI
+           ============================================== -->
+      <div id="teacher-tab-direktori-nilai" class="teacher-tab-content report-page">
+        <div class="report-page-card">
+          <div class="report-page-header">
+            <div class="report-page-header__main">
+              <h3 class="report-page-title">
+                <span class="material-symbols-rounded">account_tree</span>
+                Rapor Rekapitulasi Nilai Semester
+              </h3>
+              <p id="report-page-subject-label" class="report-page-subtitle">Mata pelajaran: —</p>
+            </div>
+            <div class="report-page-header__actions">
+              <button type="button" onclick="exportGradesToExcel({ source: 'report' })" class="action-btn report-btn-export">
+                <span class="material-symbols-rounded">table_view</span> Ekspor Semua Nilai
+              </button>
+              <button type="button" onclick="exportAveragesToExcel()" class="action-btn report-btn-excel">
+                <span class="material-symbols-rounded">download</span> Excel Rata-rata
+              </button>
+              <div class="toolbar-search report-search">
+                <span class="search-icon"><span class="material-symbols-rounded">search</span></span>
+                <input type="text" id="report-table-search" placeholder="Cari nama siswa..." onkeyup="renderReportTable()">
+              </div>
+            </div>
+          </div>
+
+          <div class="report-filter-bar">
+            <div id="report-grade-tabs" class="report-grade-tabs" role="tablist" aria-label="Tingkat kelas"></div>
+            <div id="report-table-class-tabs" class="report-class-tabs" role="tablist" aria-label="Rombel kelas"></div>
+          </div>
+
+          <select id="report-table-subject" class="filter-select" onchange="renderReportTable()" hidden>
+            <!-- Diisi via JS -->
+          </select>
+
+          <div id="report-table-container" class="report-table-container">
+            <!-- Diisi via JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TAB GURU: TUGAS DARING V7 ==================== -->
+      <div id="teacher-tab-tugas-daring" class="teacher-tab-content" style="padding: 1.25rem;">
+        <div class="teacher-workspace-grid teacher-tugas-grid">
+          
+          <!-- Form Buat Tugas Daring -->
+          <div class="glass-card lms-form-card">
+            <h3 class="lms-form-title">
+              <span class="material-symbols-rounded">add_circle</span> Rilis Tugas Daring Baru
+            </h3>
+            <form id="create-assignment-form" class="lms-form-stack">
+              <div class="form-group">
+                <label class="lms-form-label" for="assignment-subject-select">Mata pelajaran</label>
+                <select id="assignment-subject-select" class="filter-select" style="width: 100%;" required>
+                  <!-- Filled dynamically -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="lms-form-label" for="assignment-title-input">Judul materi</label>
+                <input type="text" id="assignment-title-input" class="form-control" placeholder="Contoh: Metode Campuran SPLDV" required autocomplete="off">
+              </div>
+              <div class="lms-questions-panel">
+                <div class="lms-questions-panel-header">
+                  <h4 class="lms-questions-panel-title">
+                    <span class="material-symbols-rounded" style="font-size:18px; color:var(--indigo);">edit_document</span>
+                    Pertanyaan tugas daring
+                  </h4>
+                  <button type="button" class="action-btn btn-sm" id="add-assignment-question-btn" onclick="addBuilderQuestion('pg')">
+                    <span class="material-symbols-rounded" style="font-size:15px;">add</span> Tambah soal
+                  </button>
+                </div>
+                <div id="assignment-questions-list" class="lms-questions-list"></div>
+              </div>
+              <div class="lms-schedule-grid">
+                <div class="form-group">
+                  <label class="lms-form-label" for="assignment-release-input">Waktu rilis</label>
+                  <input type="datetime-local" id="assignment-release-input" class="form-control" required>
+                </div>
+                <div class="form-group">
+                  <label class="lms-form-label" for="assignment-start-input">Waktu mulai</label>
+                  <input type="datetime-local" id="assignment-start-input" class="form-control" required>
+                </div>
+                <div class="form-group">
+                  <label class="lms-form-label" for="assignment-end-input">Deadline</label>
+                  <input type="datetime-local" id="assignment-end-input" class="form-control" required>
+                </div>
+              </div>
+              <div class="lms-media-grid">
+                <div class="form-group">
+                  <label class="lms-form-label" for="assignment-image-input">Gambar tugas (opsional)</label>
+                  <input type="file" id="assignment-image-input" class="form-control" accept="image/*">
+                </div>
+                <div class="form-group">
+                  <label class="lms-form-label" for="assignment-image-desc-input">Deskripsi gambar</label>
+                  <input type="text" id="assignment-image-desc-input" class="form-control" placeholder="Contoh: Diagram persamaan SPLDV">
+                </div>
+              </div>
+              <button type="submit" class="action-btn lms-submit-btn">
+                <span class="material-symbols-rounded" style="font-size:18px;">rocket_launch</span>
+                Rilis tugas
+              </button>
+            </form>
+          </div>
+
+          <!-- Daftar Tugas Daring & Submission -->
+          <div class="glass-card lms-list-panel">
+            <h3 class="lms-list-title">
+              <span class="material-symbols-rounded" style="color:var(--indigo);">assignment</span>
+              Daftar tugas & jawaban siswa
+            </h3>
+            <div id="teacher-assignments-list" class="lms-list-scroll"></div>
+          </div>
+
+        </div>
+      </div>
+
+
+
+
+      <!-- ==================== TAB GURU: UJIAN CBT V7 ==================== -->
+      <div id="teacher-tab-ujian-cbt" class="teacher-tab-content" style="padding: 1.25rem;">
+        <div class="teacher-workspace-grid teacher-cbt-grid">
+          
+          <!-- Form Buat Ujian & Bank Soal -->
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            
+            <div class="glass-card lms-form-card">
+              <h3 class="lms-form-title">
+                <span class="material-symbols-rounded">add_circle</span> Rilis Ujian CBT HP Baru
+              </h3>
+              <form id="create-exam-form" class="lms-form-stack">
+                <div class="form-group">
+                  <label class="lms-form-label" for="exam-subject-select">Mata pelajaran</label>
+                  <select id="exam-subject-select" class="filter-select" style="width: 100%;" required></select>
+                </div>
+                <div class="form-group">
+                  <label class="lms-form-label" for="exam-title-input">Judul ulangan harian</label>
+                  <input type="text" id="exam-title-input" class="form-control" placeholder="Contoh: Ulangan Harian Bab 1" required autocomplete="off">
+                </div>
+                <div class="lms-schedule-grid">
+                  <div class="form-group">
+                    <label class="lms-form-label" for="exam-release-input">Waktu rilis</label>
+                    <input type="datetime-local" id="exam-release-input" class="form-control" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="lms-form-label" for="exam-start-input">Waktu mulai</label>
+                    <input type="datetime-local" id="exam-start-input" class="form-control" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="lms-form-label" for="exam-end-input">Waktu berakhir</label>
+                    <input type="datetime-local" id="exam-end-input" class="form-control" required>
+                  </div>
+                </div>
+                <div class="builder-meta-grid">
+                  <div class="form-group">
+                    <label class="lms-form-label" for="exam-duration-input">Durasi ujian (menit)</label>
+                    <input type="number" id="exam-duration-input" class="form-control" min="5" max="300" value="60" required>
+                  </div>
+                  <div class="form-group" style="display:flex; flex-direction:column; justify-content:flex-end; align-items:flex-start;">
+                    <label class="lms-form-label" for="exam-shuffle-input">Acak soal</label>
+                    <input type="checkbox" id="exam-shuffle-input" style="width:20px; height:20px; accent-color:var(--indigo); cursor:pointer;" checked>
+                  </div>
+                  <div class="form-group">
+                    <label class="lms-form-label" for="exam-min-submit-input">Minimal belum kirim</label>
+                    <select id="exam-min-submit-input" class="filter-select" style="width:100%;">
+                      <option value="0">Langsung kirim</option>
+                      <option value="5">Boleh kirim (5 menit)</option>
+                      <option value="10" selected>Boleh kirim (10 menit)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="lms-media-grid" style="border-top:1px dashed var(--border); padding-top:0.75rem;">
+                  <div class="form-group">
+                    <label class="lms-form-label" for="exam-image-input">Gambar ujian (opsional)</label>
+                    <input type="file" id="exam-image-input" class="form-control" accept="image/*">
+                  </div>
+                  <div class="form-group">
+                    <label class="lms-form-label" for="exam-image-desc-input">Deskripsi gambar</label>
+                    <input type="text" id="exam-image-desc-input" class="form-control" placeholder="Contoh: Stimulus grafik SPLDV">
+                  </div>
+                </div>
+                <button type="submit" class="action-btn lms-submit-btn">
+                  <span class="material-symbols-rounded" style="font-size:18px;">devices</span>
+                  Buat sesi ujian
+                </button>
+              </form>
+            </div>
+
+            <div class="glass-card lms-form-card">
+              <h3 class="lms-form-title" style="color:var(--secondary);">
+                <span class="material-symbols-rounded">library_books</span> Input Bank Soal CBT
+              </h3>
+              <form id="add-question-form" class="lms-form-stack">
+                <div class="form-group">
+                  <label class="lms-form-label" for="question-subject-select">Mata pelajaran / bab</label>
+                  <select id="question-subject-select" class="filter-select" style="width: 100%;" required></select>
+                </div>
+                <div class="form-group">
+                  <label class="lms-form-label" for="question-type-select">Tipe soal</label>
+                  <select id="question-type-select" class="filter-select" style="width: 100%;" onchange="toggleQuestionOptions(this.value)" required>
+                    <option value="pg">Pilihan ganda (autograde)</option>
+                    <option value="essay">Jawaban essay (ketik teks)</option>
+                    <option value="kertas">Jawab di kertas (cara hitung)</option>
+                    <option value="kustom">Tipe kustom (review guru)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="lms-form-label" for="question-text-input">Pertanyaan / butir soal</label>
+                  <textarea id="question-text-input" class="form-control" rows="3" placeholder="Tulis butir soal ujian..." required></textarea>
+                </div>
+                <div id="pg-options-area" style="display:flex; flex-direction:column; gap:0.5rem;">
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                    <input type="text" id="pg-opt-0" class="form-control" placeholder="Pilihan A">
+                    <input type="text" id="pg-opt-1" class="form-control" placeholder="Pilihan B">
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                    <input type="text" id="pg-opt-2" class="form-control" placeholder="Pilihan C">
+                    <input type="text" id="pg-opt-3" class="form-control" placeholder="Pilihan D">
+                  </div>
+                  <div class="form-group">
+                    <label class="lms-form-label" for="pg-correct-select">Kunci jawaban benar</label>
+                    <select id="pg-correct-select" class="filter-select" style="width:100%;">
+                      <option value="0">A</option>
+                      <option value="1">B</option>
+                      <option value="2">C</option>
+                      <option value="3">D</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" class="action-btn lms-submit-btn">
+                  <span class="material-symbols-rounded" style="font-size:18px;">post_add</span>
+                  Tambahkan ke bank soal
+                </button>
+              </form>
+            </div>
+
+          </div>
+
+          <!-- Daftar Ujian & Bank Soal -->
+          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            
+            <div class="glass-card lms-list-panel">
+              <h3 class="lms-list-title">
+                <span class="material-symbols-rounded" style="color:var(--indigo);">devices</span>
+                Sesi ujian aktif & lembar jawaban CBT
+              </h3>
+              <div id="teacher-exams-list" class="lms-list-scroll"></div>
+            </div>
+
+            <div class="glass-card lms-list-panel">
+              <h3 class="lms-list-title">
+                <span class="material-symbols-rounded" style="color:var(--secondary);">folder_open</span>
+                Bank soal mata pelajaran
+              </h3>
+              <div id="teacher-question-bank-list" class="lms-bank-scroll"></div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ==================== TAB 2: KELOLA GURU & MAPEL ==================== -->
+      <div id="teacher-tab-config" class="teacher-tab-content config-page">
+        <div class="config-tab-layout-grid">
+          
+          <!-- SISI KIRI: STACK VERTIKAL -->
+          <div id="config-left-pane" class="config-left-pane">
+            
+            <!-- 0. PENGATURAN TAHUN AJARAN & SEMESTER -->
+            <div class="glass-card config-card config-card--session">
+              <div class="config-card-header">
+                <div>
+                  <h3 class="ui-section-title">
+                    <span class="material-symbols-rounded">calendar_month</span> Sesi Aktif
+                  </h3>
+                  <p class="config-card-hint">Pilih tahun ajaran & semester yang sedang berjalan.</p>
+                </div>
+                <button type="button" class="action-btn config-btn-apply" onclick="applyTermConfiguration()">Terapkan</button>
+              </div>
+              <div class="student-selector-bar config-session-bar">
+                <div class="selector-field" id="config-academic-year-dropdown-wrapper">
+                  <div class="di-dropdown-trigger" id="config-academic-year-dropdown-trigger" onclick="toggleDiDropdown('config-academic-year')">
+                    <span class="di-trigger-icon"><span class="material-symbols-rounded">event</span></span>
+                    <span class="di-trigger-label" id="config-academic-year-trigger-label">2026/2027</span>
+                    <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
+                  </div>
+                  <select id="config-academic-year" class="premium-select">
+                    <option value="2024/2025">2024/2025</option>
+                    <option value="2025/2026">2025/2026</option>
+                    <option value="2026/2027">2026/2027</option>
+                    <option value="2027/2028">2027/2028</option>
+                    <option value="2028/2029">2028/2029</option>
+                  </select>
+                </div>
+                <div class="selector-divider"></div>
+                <div class="selector-field" id="config-semester-dropdown-wrapper">
+                  <div class="di-dropdown-trigger" id="config-semester-dropdown-trigger" onclick="toggleDiDropdown('config-semester')">
+                    <span class="di-trigger-icon"><span class="material-symbols-rounded">timelapse</span></span>
+                    <span class="di-trigger-label" id="config-semester-trigger-label">Ganjil (I)</span>
+                    <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
+                  </div>
+                  <select id="config-semester" class="premium-select">
+                    <option value="Ganjil (I)">Ganjil (I)</option>
+                    <option value="Genap (II)">Genap (II)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 1. MASTER DATA: GURU & MAPEL -->
+            <div class="glass-card config-card">
+              <div class="config-card-header">
+                <div>
+                  <h3 class="ui-section-title">
+                    <span class="material-symbols-rounded">database</span> Master Data
+                  </h3>
+                  <p class="config-card-hint">Kelola guru, mapel, dan cadangan data sekolah.</p>
+                </div>
+                <div class="config-toolbar">
+                  <button type="button" class="config-icon-btn" onclick="exportBackupData()" title="Ekspor cadangan"><span class="material-symbols-rounded">upload</span></button>
+                  <input type="file" id="import-backup-file" onchange="importBackupData(event)" style="display: none;" accept=".json">
+                  <button type="button" class="config-icon-btn" onclick="document.getElementById('import-backup-file').click()" title="Impor cadangan"><span class="material-symbols-rounded">download</span></button>
+                  <button type="button" class="config-icon-btn config-icon-btn--danger" onclick="if(confirm('Reset database?')) resetToDefault()" title="Reset default"><span class="material-symbols-rounded">restart_alt</span></button>
+                </div>
+              </div>
+
+              <div class="config-step">
+                <div class="config-step-label">
+                  <span class="config-step-num">1</span>
+                  <span>Penambahan Guru Pengampu</span>
+                </div>
+                <form id="add-teacher-form" class="config-form">
+                  <div class="config-form-row">
+                    <input type="text" id="input-teacher-name" class="form-control" placeholder="Nama guru" required>
+                    <input type="text" id="input-teacher-subject" class="form-control" placeholder="Keterangan mapel (mis. IPA)" required>
+                  </div>
+                  <div class="config-form-row">
+                    <input type="text" id="input-teacher-classes" class="form-control config-input-clickable" placeholder="Pilih kelas diajar..." required readonly onclick="openClassChecklistModal()">
+                    <button type="submit" class="action-btn config-btn-submit">Tambah</button>
+                  </div>
+                </form>
+                <div id="config-teachers-list" class="config-teachers-list"></div>
+              </div>
+
+              <div class="config-step config-step--divider">
+                <div class="config-step-label">
+                  <span class="config-step-num">2</span>
+                  <span>Sinkronisasi Guru ke Mapel</span>
+                </div>
+                <form id="add-subject-form" class="config-form">
+                  <div class="config-form-row">
+                    <input type="text" id="input-sub-name" class="form-control" placeholder="Nama mapel" required>
+                    <input type="number" id="input-sub-kkm" class="form-control config-input-kkm" min="0" max="100" placeholder="KKM" value="75" required>
+                  </div>
+                  <div class="config-form-row">
+                    <select id="select-sub-teacher" class="filter-select" required></select>
+                    <button type="submit" class="action-btn config-btn-submit">Tambah</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- 2. DATA SISWA ROMBEL -->
+            <div class="glass-card config-card">
+              <div class="config-card-header">
+                <div>
+                  <h3 class="ui-section-title">
+                    <span class="material-symbols-rounded">group_add</span> Data Siswa Rombel
+                  </h3>
+                  <p class="config-card-hint">Impor siswa dari template CSV semua kelas sekaligus.</p>
+                </div>
+                <button type="button" class="action-btn danger-btn config-btn-danger-sm" id="config-delete-all-btn" onclick="deleteAllStudents()" title="Hapus semua siswa">
+                  <span class="material-symbols-rounded">delete_sweep</span> Kosongkan
+                </button>
+              </div>
+
+              <div class="config-csv-actions">
+                <button type="button" class="action-btn config-btn-secondary" onclick="downloadStudentTemplateCsv()" id="btn-download-csv-template">
+                  <span class="material-symbols-rounded">download</span> Download Template
+                </button>
+                <input type="file" id="csv-upload-input" accept=".csv,.txt" onchange="uploadStudentCsv(event)" style="display: none;">
+                <button type="button" class="action-btn config-btn-success" onclick="document.getElementById('csv-upload-input').click()" id="btn-upload-csv">
+                  <span class="material-symbols-rounded">upload</span> Upload Template
+                </button>
+              </div>
+
+              <div class="config-form-row config-form-row--danger">
+                <select id="config-delete-class-select" class="filter-select">
+                  <option value="">Pilih kelas untuk dihapus...</option>
+                </select>
+                <button type="button" class="action-btn danger-btn config-btn-danger-sm" id="config-delete-class-btn" onclick="deleteClassFromConfig()">
+                  <span class="material-symbols-rounded">delete</span> Hapus
+                </button>
+              </div>
+
+              <select id="csv-tingkat-select" style="display:none;"><option value="8">8</option></select>
+              <select id="csv-rombel-select" style="display:none;"><option value="">All</option></select>
+              <div id="csv-import-feedback" class="csv-feedback" style="display: none;"></div>
+            </div>
+
+          </div>
+
+          <!-- SISI KANAN: PENGATURAN BOBOT BAB -->
+          <div class="glass-card config-card config-card--weights">
+            <div class="config-card-header config-card-header--stack">
+              <div>
+                <h3 class="ui-section-title ui-section-title-lg">
+                  <span class="material-symbols-rounded">tune</span> Bobot Bab & Struktur Penilaian
+                </h3>
+                <p class="config-card-hint">Atur komponen tugas dan bobot nilai per bab, dipisah per tingkat kelas.</p>
+              </div>
+            </div>
+
+            <div id="config-grade-tabs" class="config-grade-tabs" role="tablist" aria-label="Tingkat kelas"></div>
+            <div id="config-subjects-list" class="config-subjects-list"></div>
+          </div>
+
+        </div> <!-- .config-tab-layout-grid -->
+      </div>
+
+
+
+    </section>
+
+  </main>
+
+  <!-- ==============================================
+       ADD NEW STUDENT DIALOG MODAL V6
+       ============================================== -->
+  <div id="add-student-modal" class="modal-overlay">
+    <div class="modal-container" style="max-width: 480px;">
+      
+      <div class="modal-header">
+        <h3 style="font-family: var(--font-heading); font-weight: 700;">Tambah Siswa Baru</h3>
+        <button class="modal-close" onclick="closeAddStudentModal()">✕</button>
+      </div>
+
+      <!-- Tab Buttons Inside Modal -->
+      <div class="modal-tab-bar">
+        <button id="add-student-tab-single" type="button" class="teacher-tab-btn active" style="font-size: 0.8rem; padding: 0.4rem 1rem; border-radius: var(--radius-sm) var(--radius-sm) 0 0; display:flex; align-items:center; gap:0.25rem;" onclick="switchAddStudentTab('single')">
+          <span class="material-symbols-rounded" style="font-size:14px;">person</span> Satu Siswa
+        </button>
+        <button id="add-student-tab-bulk" type="button" class="teacher-tab-btn" style="font-size: 0.8rem; padding: 0.4rem 1rem; border-radius: var(--radius-sm) var(--radius-sm) 0 0; display:flex; align-items:center; gap:0.25rem;" onclick="switchAddStudentTab('bulk')">
+          <span class="material-symbols-rounded" style="font-size:14px;">format_list_bulleted</span> Input Massal (Bulk)
+        </button>
+      </div>
+
+      <form id="add-student-form">
+        <!-- Tab 1: Single Student Content -->
+        <div id="add-student-content-single" class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group">
+            <label for="add-student-name-input" style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">Nama Lengkap Siswa *</label>
+            <input type="text" id="add-student-name-input" class="form-control" placeholder="Contoh: Ahmad Syarifudin" required autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="add-student-class-input" style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">Kelas Siswa *</label>
+            <input type="text" id="add-student-class-input" class="form-control" placeholder="Contoh: 8A" required autocomplete="off">
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label for="add-student-absent-input" style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">No. Absen</label>
+              <input type="number" id="add-student-absent-input" class="form-control" placeholder="Contoh: 1" min="1" max="100">
+            </div>
+            <div class="form-group">
+              <label for="add-student-gender-input" style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">Jenis Kelamin *</label>
+              <select id="add-student-gender-input" class="filter-select" style="width:100%; height:38px; font-size:0.85rem;" required>
+                <option value="L">Laki-laki (L)</option>
+                <option value="P">Perempuan (P)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Bulk Students Content (hidden by default) -->
+        <div id="add-student-content-bulk" class="modal-body d-none" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-group">
+            <label for="add-student-bulk-input" style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">Daftar Siswa Baru (Satu Nama Per Baris) *</label>
+            <textarea id="add-student-bulk-input" class="form-control" rows="6" placeholder="Ketik atau tempel daftar nama siswa...&#10;Contoh:&#10;Budi Hermawan&#10;Cici Rahmawati, 8B&#10;Elisa Fitriani" style="resize: vertical; font-size: 0.85rem; padding: 0.6rem;"></textarea>
+            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; display: block; line-height: 1.3;">
+              💡 Tips: Anda dapat mencantumkan kelas setelah nama menggunakan pemisah koma (contoh: <code>Nama Siswa, 8B</code>). Siswa tanpa kelas akan dimasukkan ke kelas default di bawah ini.
+            </span>
+          </div>
+          <div class="form-group">
+            <label for="add-student-bulk-class-input" style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.35rem;">Kelas Default (Jika Tidak Ditentukan) *</label>
+            <input type="text" id="add-student-bulk-class-input" class="form-control" placeholder="Contoh: 8A" value="8A">
+          </div>
+        </div>
+
+        <div class="modal-footer" style="background: rgba(255, 255, 255, 0.01);">
+          <button type="button" class="action-btn secondary-btn" onclick="closeAddStudentModal()">Batal</button>
+          <button type="submit" class="action-btn">Simpan Siswa</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ==============================================
+       TEACHER ACCOUNT / ROLE SELECTION MODAL
+       ============================================== -->
+  <div id="role-modal" class="modal-overlay">
+    <div class="modal-container" style="max-width: 450px; text-align: center; overflow: visible;">
+      
+      <div class="modal-header">
+        <h3 style="width: 100%; text-align: center; font-family: var(--font-heading); font-weight:700;">Pilih Identitas Guru</h3>
+        <button class="modal-close" onclick="closeRoleModal()">✕</button>
+      </div>
+
+      <form id="role-selector-form">
+        <div class="modal-body" style="padding: 2.25rem 1.75rem; overflow: visible;">
+          <div style="font-size: 3.5rem; margin-bottom: 1.25rem; filter: drop-shadow(0 0 10px rgba(6,182,212,0.35)); display:flex; align-items:center; justify-content:center;"><span class="material-symbols-rounded" style="font-size:3.5rem; color:var(--indigo);">account_circle</span></div>
+          <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
+            Silakan pilih nama Anda atau masuk sebagai Wali Kelas untuk mengelola nilai di dashboard SiGrade.
+          </p>
+          <div class="form-group" style="text-align: left;">
+            <label style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin-bottom:0.35rem; display:block;">PILIH AKUN GURU:</label>
+            <div class="selector-field" id="role-dropdown-wrapper" style="width: 100%;">
+              <div class="di-dropdown-trigger" id="role-dropdown-trigger" onclick="toggleDiDropdown('role')" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--r-md); height: 44px; padding: 0.5rem 1rem;">
+                <span class="di-trigger-icon" style="color: var(--secondary);"><span class="material-symbols-rounded">person</span></span>
+                <span class="di-trigger-label placeholder" id="role-trigger-label" style="font-size:0.95rem; font-family:var(--font-heading); font-weight:600;">-- Pilih Nama Anda --</span>
+                <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
+              </div>
+              <select id="role-selector-select" class="premium-select" style="display:none;" required>
+                <!-- Populated dynamically via JS -->
+              </select>
+            </div>
+          </div>
+          <div id="role-password-group" class="form-group" style="text-align: left; margin-top: 1rem;">
+            <label style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin-bottom:0.35rem; display:block;">MASUKKAN KATA SANDI GURU:</label>
+            <input type="password" id="role-password-input" class="form-control" placeholder="Kata Sandi Guru" style="font-size: 1.05rem;" required autocomplete="current-password">
+            <span id="role-password-error-msg" style="color: var(--danger); font-size: 0.78rem; margin-top: 0.65rem; font-weight: 600; display: none;">
+              ❌ Kata sandi salah! Silakan coba lagi.
+            </span>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="justify-content: center; gap: 0.75rem; background: rgba(255, 255, 255, 0.02);">
+          <button type="button" class="action-btn secondary-btn" style="min-width: 100px;" onclick="closeRoleModal()">Batal</button>
+          <button type="submit" class="action-btn" style="min-width: 100px;">Pilih Akun</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ==============================================
+       TEACHER PASSWORD AUTHENTICATION MODAL
+       ============================================== -->
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal-container" style="max-width: 400px; text-align: center;">
+      
+      <div class="modal-header">
+        <h3 style="width: 100%; text-align: center;">Akses Khusus Guru</h3>
+        <button class="modal-close" onclick="closeAuthModal()">✕</button>
+      </div>
+
+      <form id="auth-form">
+        <div class="modal-body" style="padding: 2.25rem 1.75rem;">
+          <div style="font-size: 3rem; margin-bottom: 1.25rem; filter: drop-shadow(0 0 10px rgba(99,102,241,0.3)); display:flex; align-items:center; justify-content:center;"><span class="material-symbols-rounded" style="font-size:3rem; color:var(--indigo);">lock</span></div>
+          <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.5;">
+            Halaman ini dilindungi. Silakan masukkan kata sandi guru untuk mengakses dashboard SiGrade.
+          </p>
+          <div class="form-group">
+            <input type="password" id="auth-password" class="form-control" placeholder="Kata Sandi" style="text-align: center; font-size: 1.05rem; letter-spacing: 2px;" required autocomplete="current-password">
+            <span id="auth-error-msg" style="color: var(--danger); font-size: 0.78rem; margin-top: 0.65rem; font-weight: 600; display: none; transition: all var(--transition-fast);">
+              ⚠️ Kata sandi salah! Silakan coba lagi.
+            </span>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="justify-content: center; gap: 0.75rem; background: rgba(255, 255, 255, 0.02);">
+          <button type="button" class="action-btn secondary-btn" style="min-width: 100px;" onclick="closeAuthModal()">Batal</button>
+          <button type="submit" class="action-btn" style="min-width: 100px;">Masuk</button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- ==============================================
+       LMS LEARN & COMPLETE TASK DIALOG MODAL V7
+       ============================================== -->
+  <div id="lms-modal" class="modal-overlay">
+    <div class="modal-container" style="max-width: 580px;">
+      
+      <div class="modal-header">
+        <h3 id="lms-modal-title" style="font-family: var(--font-heading); font-weight: 700; display:flex; align-items:center; gap:0.35rem;"><span class="material-symbols-rounded">edit_note</span> Bimbingan Soal & Lengkapi</h3>
+        <button class="modal-close" onclick="closeLmsModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; max-height: 70vh; overflow-y: auto;">
+        
+        <!-- Judul & Rangkuman Teori -->
+        <div style="background: rgba(6, 182, 212, 0.06); border: 1px solid rgba(6, 182, 212, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+          <div id="lms-subject-chapter" style="font-family: var(--font-heading); font-weight: 700; font-size: 0.8rem; color: var(--secondary); margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.5px;">Matematika - Bab 1</div>
+          <h3 id="lms-task-name" style="font-family: var(--font-heading); font-weight: 800; font-size: 1.15rem; color: var(--text-primary); margin-bottom: 0.75rem;">Konsep SPLDV</h3>
+          <p id="lms-theory-text" style="font-size: 0.825rem; color: var(--text-secondary); line-height: 1.6; white-space: pre-line;">
+            Teori penjelasan materi ringkas SMP untuk membantu siswa belajar...
+          </p>
+        </div>
+
+        <!-- Instruksi Latihan -->
+        <div>
+          <h4 style="font-family: var(--font-heading); font-weight: 700; font-size: 0.88rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+            <span class="material-symbols-rounded" style="font-size:16px;">assignment</span> Latihan & Petunjuk Tugas:
+          </h4>
+          <p id="lms-instruction-text" style="font-size: 0.825rem; color: var(--text-secondary); line-height: 1.6; background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; white-space: pre-line;">
+            Selesaikan soal matematika SPLDV di bawah ini secara runut...
+          </p>
+        </div>
+
+        <!-- Info Buku (mode buku) -->
+        <div id="lms-buku-section" style="display: none; background: rgba(168, 85, 247, 0.06); border: 1px solid rgba(168, 85, 247, 0.2); border-radius: var(--radius-sm); padding: 1rem;">
+          <h4 style="font-family: var(--font-heading); font-weight: 700; font-size: 0.88rem; color: var(--text-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+            <span class="material-symbols-rounded" style="font-size:16px;">menu_book</span> Referensi Buku:
+          </h4>
+          <div style="font-size: 0.825rem; color: var(--text-secondary); line-height: 1.6;">
+            <div><strong style="color:var(--text-primary);">Judul:</strong> <span id="lms-buku-title">-</span></div>
+            <div style="margin-top:0.25rem;"><strong style="color:var(--text-primary);">Halaman:</strong> <span id="lms-buku-pages">-</span></div>
+          </div>
+        </div>
+
+        <!-- Container Gambar Tugas Kustom (Opsional) -->
+        <div id="lms-image-container" style="display: none; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; text-align: center;">
+          <img id="lms-task-image" src="" alt="Gambar Pendukung Tugas" style="max-width: 100%; max-height: 250px; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.1); margin-bottom: 0.5rem; object-fit: contain;">
+          <div id="lms-task-image-desc" style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic; font-weight: 600;">Deskripsi gambar...</div>
+        </div>
+
+        <!-- Form Pengumpulan Jawaban -->
+        <form id="lms-submission-form" onsubmit="event.preventDefault();">
+          <div class="form-group">
+            <label for="lms-answer-input" style="font-size: 0.75rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 0.5rem; display: block; text-transform: uppercase; letter-spacing: 0.3px;">Tulis Jawaban Anda Di Sini *</label>
+            <textarea id="lms-answer-input" class="form-control" rows="4" placeholder="Ketik jawaban, langkah-langkah, atau kesimpulan Anda di sini untuk dinilai guru..." required style="resize: vertical; font-family: var(--font-body); font-size: 0.85rem; padding: 0.75rem;"></textarea>
+          </div>
+          
+          <!-- Hidden inputs to track context -->
+          <input type="hidden" id="lms-student-id">
+          <input type="hidden" id="lms-subject-id">
+          <input type="hidden" id="lms-chapter-name">
+          <input type="hidden" id="lms-task-type">
+          <input type="hidden" id="lms-task-item-name">
+        </form>
+
+      </div>
+
+      <div class="modal-footer" style="background: rgba(255, 255, 255, 0.015); justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="action-btn secondary-btn" onclick="closeLmsModal()">Batal</button>
+        <button type="button" class="action-btn" onclick="submitLmsAssignment()" id="lms-submit-btn">Kirim Jawaban Tugas</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==============================================
+       AI KATROL MODAL V18
+       ============================================== -->
+  <div id="ai-katrol-modal" class="modal-overlay">
+    <div class="modal-container" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 style="font-family: var(--font-heading); font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: #a855f7;">
+          <span class="material-symbols-rounded">psychology</span> AI Katrol Nilai Tugas
+        </h3>
+        <button class="modal-close" onclick="closeAIKatrolModal()">✕</button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="ai-katrol-loading" style="padding: 3rem 1.5rem; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+        <div class="notification-badge-glow" style="font-size: 3rem; display:flex; align-items:center; justify-content:center;"><span class="material-symbols-rounded" style="font-size:3.5rem; color:var(--purple); animation: timerPulse 1.5s infinite;">psychology</span></div>
+        <h4 style="font-family: var(--font-heading); font-size: 1.1rem; color: var(--text-primary); margin: 0;">AI Menganalisis Kelemahan Belajar Siswa...</h4>
+        <p style="color: var(--text-secondary); font-size: 0.8rem; max-width: 340px; margin: 0; line-height: 1.5;">
+          Mengidentifikasi nilai kuis/tugas di bawah KKM dan merumuskan bobot katrol optimal.
+        </p>
+        <div class="spinner" style="border: 3px solid rgba(168,85,247,0.1); border-top: 3px solid #a855f7; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite;"></div>
+      </div>
+
+      <!-- Comparison State -->
+      <div id="ai-katrol-result" style="display: none; padding: 1.5rem; flex-direction: column; gap: 1.25rem;">
+        <div>
+          <strong style="color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase;">Siswa:</strong>
+          <h4 id="ai-katrol-student-name" style="font-family: var(--font-heading); font-size: 1.15rem; color: var(--text-primary); margin: 2px 0 0 0;">Fahri Alamsyah (Kelas 8A)</h4>
+        </div>
+
+        <div style="background: rgba(168, 85, 247, 0.05); border: 1px solid rgba(168, 85, 247, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+          <h5 style="font-family: var(--font-heading); font-size: 0.85rem; color: #c084fc; margin: 0 0 0.5rem 0; font-weight: 700;">Analisis Komponen N1/N2/N3/UH</h5>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0 0 1rem 0; line-height: 1.45;">
+            AI menganalisis komponen nilai N1 (Tugas 1), N2 (Tugas 2), N3 (Tugas 3), dan UH (Ulangan Harian) per mapel, lalu menaikkan komponen terendah yang belum mencapai KKM. Rumus: <strong>(N1 + N2 + N3 + 2×UH) ÷ 5</strong>.
+          </p>
+
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
+            <thead>
+              <tr class="ai-katrol-table-header">
+                <th style="padding: 0.5rem; font-weight: 700;">Komponen</th>
+                <th style="padding: 0.5rem; text-align: center;">Saat Ini</th>
+                <th style="padding: 0.5rem; text-align: center; color: #a855f7;">Usulan Katrol</th>
+              </tr>
+            </thead>
+            <tbody id="ai-katrol-comparison-tbody">
+              <!-- Filled dynamically per subject + N1/N2/N3/UH + Final -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="ai-katrol-note">
+          <strong>💡 Detail Perubahan Nilai:</strong>
+          <div id="ai-katrol-raw-changes" style="margin-top: 0.25rem; font-family: monospace; font-size: 0.72rem; color: var(--text-secondary); max-height: 120px; overflow-y: auto;">
+            <!-- Filled dynamically -->
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem;">
+          <button type="button" class="action-btn secondary-btn" onclick="closeAIKatrolModal()">Batal</button>
+          <button type="button" class="action-btn" style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); border: none; box-shadow: 0 4px 12px rgba(168,85,247,0.3);" onclick="applyAIKatrolGrades()">Terapkan Nilai Baru</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==============================================
+       CBT MOBILE EXAM MODAL V7
+       ============================================== -->
+  <div id="cbt-exam-modal" class="modal-overlay" style="z-index: 1000;">
+    <div class="modal-container" style="max-width: 100%; width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; margin: 0; display: flex; flex-direction: column; background: var(--bg-main);">
+      
+      <!-- CBT Header -->
+      <div class="modal-header" style="border-radius: 0; padding: 1rem 1.5rem; background: var(--bg-card-solid); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div>
+          <h3 id="cbt-exam-title" style="font-family: var(--font-heading); font-weight: 800; font-size: 1.15rem; color: var(--text-primary);">Ulangan Harian CBT via HP</h3>
+          <p id="cbt-student-info" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">Peserta: Fahri Alamsyah (8C)</p>
+        </div>
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 6px 14px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 0.5rem; height: 38px;">
+          <span class="material-symbols-rounded" style="font-size: 18px; color: var(--danger);">timer</span>
+          <span id="cbt-timer" style="font-family: var(--font-heading); font-weight: 700; font-size: 1rem; color: var(--danger); letter-spacing: 0.5px;">00:00</span>
+        </div>
+      </div>
+
+      <!-- CBT Body / Question Area -->
+      <div class="modal-body" style="flex: 1; padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem; max-width: 680px; margin: 0 auto; width: 100%;">
+        
+        <!-- Soal Indicator & Type Tag -->
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span id="cbt-question-number" style="font-family: var(--font-heading); font-weight: 700; font-size: 0.95rem; color: var(--text-primary);">Pertanyaan 1 dari 10</span>
+          <span id="cbt-question-type-tag" class="status-badge complete" style="font-size: 0.65rem; padding: 2px 8px; font-weight: 700; text-transform: uppercase;">Pilihan Ganda</span>
+        </div>
+
+        <!-- Container Gambar Stimulus Ujian (Opsional) -->
+        <div id="cbt-image-container" style="display: none; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; text-align: center;">
+          <img id="cbt-exam-image" src="" alt="Gambar Stimulus Ujian" style="max-width: 100%; max-height: 200px; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.1); margin-bottom: 0.5rem; object-fit: contain;">
+          <div id="cbt-exam-image-desc" style="font-size: 0.75rem; color: var(--text-secondary); font-style: italic; font-weight: 600;">Deskripsi gambar ujian...</div>
+        </div>
+
+        <!-- Soal Text -->
+        <div id="cbt-question-text" style="font-size: 1rem; line-height: 1.6; color: var(--text-primary); font-weight: 500; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; white-space: pre-line;">
+          Teks soal akan dimuat di sini...
+        </div>
+
+        <!-- Jawaban Input Container -->
+        <div id="cbt-answer-container" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+          <!-- Filled dynamically via JS -->
+        </div>
+
+      </div>
+
+      <!-- CBT Navigation Footer -->
+      <div class="modal-footer" style="background: var(--bg-card-solid); border-top: 1px solid var(--border-color); border-radius: 0; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 680px; margin: 0 auto;">
+        <button id="cbt-prev-btn" class="action-btn secondary-btn" style="padding: 0.5rem 1.25rem; font-size: 0.8rem; height: 36px; display:flex; align-items:center; gap:0.25rem;" onclick="cbtNavigateQuestion(-1)">
+          <span class="material-symbols-rounded" style="font-size: 14px;">arrow_back</span> Sblmnya
+        </button>
+        
+        <!-- Quick Soal Grid Button -->
+        <button class="action-btn secondary-btn" style="padding: 0.5rem 1rem; font-size: 0.8rem; height: 36px; display:flex; align-items:center; gap:0.25rem;" onclick="toggleCbtNavGrid()">
+          <span class="material-symbols-rounded" style="font-size: 14px;">apps</span> Soal Grid
+        </button>
+
+        <button id="cbt-next-btn" class="action-btn" style="padding: 0.5rem 1.25rem; font-size: 0.8rem; height: 36px; display:flex; align-items:center; gap:0.25rem;" onclick="cbtNavigateQuestion(1)">
+          Brktnya <span class="material-symbols-rounded" style="font-size: 14px;">arrow_forward</span>
+        </button>
+      </div>
+
+      <!-- CBT Quick Nav Grid Popover (Hidden by default) -->
+      <div id="cbt-nav-grid-overlay" style="display: none; position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--bg-card-solid); border: 1px solid var(--border-color); box-shadow: var(--shadow-lg); border-radius: var(--radius-md); padding: 1rem; width: 90%; max-width: 380px; z-index: 1001; animation: fadeIn var(--transition-fast) forwards;">
+        <h4 style="font-family: var(--font-heading); font-weight: 700; margin-bottom: 0.75rem; font-size: 0.85rem; text-align: center; color: var(--text-primary);">Navigasi Nomor Soal</h4>
+        <div id="cbt-nav-grid-buttons" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; max-height: 200px; overflow-y: auto; padding: 2px;">
+          <!-- Diisi dinamis -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+
+  </div> <!-- /main-wrapper -->
+  </div> <!-- /app-layout -->
+
+  <!-- ==============================================
+       COMPLETENESS AUDIT MODAL (V16)
+       ============================================== -->
+  <div id="completeness-audit-modal" class="modal-overlay" style="z-index: 999;">
+    <div class="modal-container" style="max-width: 900px; width: 90%; height: 80vh; display: flex; flex-direction: column; background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden;">
+      
+      <!-- Header -->
+      <div class="modal-header" style="padding: 1.25rem 1.5rem; background: rgba(255, 255, 255, 0.015); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div>
+          <h3 style="font-family: var(--font-heading); font-weight: 800; font-size: 1.2rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+            <span>📋</span> Audit Kelengkapan Nilai Siswa
+          </h3>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">Daftar seluruh siswa dan elemen tugas yang belum diselesaikan secara tuntas</p>
+        </div>
+        <button onclick="closeCompletenessAuditModal()" class="icon-btn" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer;" title="Tutup">
+          ✕
+        </button>
+      </div>
+
+      <!-- Split Layout Workspace -->
+      <div class="audit-split-layout" style="flex: 1; display: grid; grid-template-columns: 1fr; overflow: hidden; height: 100%;">
+        
+        <!-- Left Pane: Class-grouped list -->
+        <div class="audit-left-pane" style="border-right: 1px solid var(--border-color); overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+          <div id="audit-class-groups-container">
+            <!-- Dynamic grouped list via JS -->
+          </div>
+        </div>
+
+        <!-- Right Pane: Student details -->
+        <div class="audit-right-pane" style="overflow-y: auto; padding: 1.25rem; background: rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 1rem; position: relative;">
+          <!-- Default placeholder when no student selected -->
+          <div id="audit-detail-placeholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem; color: var(--text-muted);">
+            <span style="font-size: 3rem; margin-bottom: 1rem;">🔍</span>
+            <h4 style="font-family: var(--font-heading); font-weight: 700; color: var(--text-secondary); font-size: 1rem;">Pilih Nama Siswa</h4>
+            <p style="font-size: 0.8rem; max-width: 240px; margin-top: 0.25rem;">Klik salah satu siswa di sebelah kiri untuk melihat elemen nilai yang belum lengkap.</p>
+          </div>
+          
+          <!-- Detailed content container -->
+          <div id="audit-detail-content" style="display: none; flex-direction: column; gap: 1rem; height: 100%;">
+            <!-- Dynamic detailed checklist via JS -->
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==============================================
+       AVERAGES ANALYTICS MODAL (V16)
+       ============================================== -->
+  <div id="averages-analytics-modal" class="modal-overlay" style="z-index: 999;">
+    <div class="modal-container" style="max-width: 800px; width: 90%; max-height: 85vh; display: flex; flex-direction: column; background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden;">
+      
+      <!-- Header -->
+      <div class="modal-header" style="padding: 1.25rem 1.5rem; background: rgba(255, 255, 255, 0.015); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div>
+          <h3 style="font-family: var(--font-heading); font-weight: 800; font-size: 1.2rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+            <span>📈</span> Analisis Rata-Rata Nilai Antar-Kelas
+          </h3>
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">Perbandingan prestasi rata-rata siswa di tiap bab materi pelajaran</p>
+        </div>
+        <button onclick="closeAveragesAnalyticsModal()" class="icon-btn" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer;" title="Tutup">
+          ✕
+        </button>
+      </div>
+
+      <!-- Scrollable content -->
+      <div class="modal-body" style="padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 2rem;">
+        
+        <!-- Legend explaining class colors (filled by JS) -->
+        <div id="averages-charts-legend" style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 1rem;">
+        </div>
+
+        <!-- Charts Container -->
+        <div id="averages-charts-container" style="display: flex; flex-direction: column; gap: 2rem;">
+          <!-- Dynamic chapter analytics loaded here -->
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+  <!-- ==============================================
+       STUDENT REPORT CARD MODAL (DIREKTORI NILAI)
+       ============================================== -->
+  <div id="report-card-modal" class="modal-overlay" style="z-index: 1050; display: none;">
+    <div class="modal-container" style="max-width: 750px; width: 95%; max-height: 85vh; display: flex; flex-direction: column; background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);">
+      <div class="modal-header" style="padding: 1.25rem 1.5rem; background: rgba(255, 255, 255, 0.015); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h3 style="font-family: var(--font-heading); font-weight: 800; font-size: 1.2rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+            <span class="material-symbols-rounded">assignment</span> Direktori Nilai Siswa
+          </h3>
+          <p id="report-card-subtitle" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px;">Rapor Rekapitulasi Nilai Semester</p>
+        </div>
+        <button onclick="closeStudentReportCard()" class="icon-btn" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer;" title="Tutup">
+          ✕
+        </button>
+      </div>
+      <div id="report-card-body" class="modal-body" style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;">
+        <!-- Injected via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ==============================================
+       MASTER DATA CLASS CHECKLIST MODAL
+       ============================================== -->
+  <div id="class-checklist-modal" class="modal-overlay" style="display:none; z-index: 2000;">
+    <div class="modal-content" style="max-width: 400px; max-height: 80vh; display: flex; flex-direction: column; background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 1.5rem;">
+      <h3 style="margin-bottom: 1rem; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center;">
+        Pilih Kelas Diajar
+        <button onclick="closeClassChecklistModal()" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:1.2rem;">&times;</button>
+      </h3>
+      <div id="class-checklist-container" style="flex: 1; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <!-- Checkboxes will be injected here -->
+      </div>
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button class="action-btn secondary-btn" onclick="closeClassChecklistModal()">Batal</button>
+        <button class="action-btn primary-btn" style="background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); border: none;" onclick="saveClassChecklist()">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase CDN and Logic -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="apiClient.js?v=3"></script>
+  <script src="auth.js?v=4"></script>
+
+  <!-- Application Logic -->
+  <script src="app_core.js?v=29"></script>
+</body>
+</html>
