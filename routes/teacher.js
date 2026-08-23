@@ -108,6 +108,31 @@ router.post('/grade', async (req, res) => {
   }
 });
 
+// ── Tulis state penuh (replace) ───────────────────────────────────────────────
+router.put('/state', async (req, res) => {
+  try {
+    const newState = req.body;
+    if (!newState || typeof newState !== 'object') {
+      return res.status(400).json({ error: 'Body harus berupa JSON object' });
+    }
+    const result = await updateAppState((state) => {
+      // Validate that the teacher exists (check newState first in case backend state is empty)
+      const allTeachers = (state.teachers && state.teachers.length > 0) ? state.teachers : (newState.teachers || []);
+      const teacher = allTeachers.find((t) => t.key === req.teacherKey);
+      if (!teacher) {
+        const err = new Error('Kunci guru tidak valid');
+        err.status = 403;
+        throw err;
+      }
+      Object.assign(state, newState);
+      return { success: true };
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 // ── Daftar submission tugas / ujian ──────────────────────────────────────────
 router.get('/submissions/:subjectId', async (req, res) => {
   try {

@@ -309,7 +309,7 @@ function getDefaultTaskHiddenClasses() {
 }
 
 function isDirectoryTaskReleased(tDir, className) {
-  if (!tDir || !Array.isArray(tDir.hiddenClasses)) return false;
+  if (!tDir || !Array.isArray(tDir.hiddenClasses)) return true;
   if (tDir.hiddenClasses.length === 0) return true;
   if (!className || className === "ALL") {
     return tDir.hiddenClasses.length < appState.classes.length;
@@ -592,6 +592,7 @@ function recalculateSubjectCompleteness(student, subjectId) {
   let allReleasedComplete = true;
 
   (subject.chapters || []).forEach((ch) => {
+    if (ch.isHidden) return;
     const sCh = student.grades?.[subjectId]?.chapters?.[ch.name] || { tasks: {} };
 
     (ch.tasks || []).forEach((taskName) => {
@@ -999,15 +1000,50 @@ function normalizeLoadedAppState() {
     if (st.absentNo === undefined) st.absentNo = '-';
     if (st.name) st.name = st.name.toUpperCase();
   });
-  appState.students = appState.students.filter((st) => st && st.name && st.name.trim() !== '');
+  
+  // Aggressive cleanup: remove any ghost or dummy students that lack a real name
+  appState.students = appState.students.filter((st) => {
+    if (!st || !st.name) return false;
+    const n = st.name.trim();
+    if (n === '' || n === '-' || n === '.' || n.toLowerCase() === 'null' || n.toLowerCase() === 'undefined') return false;
+    return true;
+  });
 
   appState.subjects.forEach((sub) => {
     if (!sub.onlineAssignments) sub.onlineAssignments = [];
     if (!sub.onlineExams) sub.onlineExams = [];
     if (!sub.tasksDirectory) sub.tasksDirectory = {};
     if (sub.chapters) {
-      sub.chapters.forEach((ch) => {
+      sub.chapters.forEach((ch, idx) => {
         if (ch.targetMaxWeight === undefined) ch.targetMaxWeight = 30;
+        
+        // Migrate chapter names to standard "Bab X (Judul Materi)"
+        const oldName = ch.name.trim();
+        let newName = oldName;
+
+        if (/^Bab\s+\d+$/i.test(oldName)) {
+          newName = `${oldName} (Judul Materi)`;
+        } else if (!/^Bab\s+\d+/i.test(oldName)) {
+          newName = `Bab ${idx + 1} (${oldName})`;
+        } else if (/^Bab\s+\d+/i.test(oldName) && !/^Bab\s+\d+\s*\(.*?\)$/i.test(oldName)) {
+          const match = oldName.match(/^(Bab\s+\d+)(?:\s+|-|:)*(.*)$/i);
+          if (match && match[2] && match[2].trim() !== "") {
+            newName = `${match[1]} (${match[2].trim()})`;
+          } else if (match) {
+            newName = `${match[1]} (Judul Materi)`;
+          }
+        }
+
+        if (newName !== oldName) {
+          ch.name = newName;
+          
+          appState.students.forEach(st => {
+            if (st.grades[sub.id] && st.grades[sub.id].chapters && st.grades[sub.id].chapters[oldName]) {
+              st.grades[sub.id].chapters[newName] = st.grades[sub.id].chapters[oldName];
+              delete st.grades[sub.id].chapters[oldName];
+            }
+          });
+        }
       });
     }
   });
@@ -1044,7 +1080,7 @@ function calculateStudentSubjectScore(student, subjectId) {
   let totalChaptersAverageSum = 0;
   let chCount = 0;
 
-  const chDetails = chapters.map(ch => {
+  const chDetails = chapters.filter(ch => !ch.isHidden).map(ch => {
     const chTasks = ch.tasks || [];
     const sChGrades = sGrades.chapters && sGrades.chapters[ch.name]
       ? sGrades.chapters[ch.name]
@@ -1105,7 +1141,10 @@ function calculateStudentSubjectScore(student, subjectId) {
 function getOverallStudentCompleteness(student) {
   let activeSubjects = [];
   try {
-    activeSubjects = getSubjectsForStudent(student);
+    activeSubjects = getSubjectsForStudent(student).filter(sub => {
+      // Only count subjects that have at least one chapter configured
+      return sub.chapters && sub.chapters.length > 0;
+    });
   } catch (err) {
     console.error("Error in filtering active subjects:", err);
     activeSubjects = [];
@@ -1113,24 +1152,53 @@ function getOverallStudentCompleteness(student) {
   
   if (activeSubjects.length === 0) return { total: 0, completed: 0, percentage: 0, isAllComplete: false, hasNoSubjects: true };
 
-  let completed = 0;
+  let totalTasksAllSubjects = 0;
+  let completedTasksAllSubjects = 0;
+
   activeSubjects.forEach(sub => {
+    // Tetap set student.completeness per mapel untuk compatibility status label mapel
     const isComplete = isStudentSubjectComplete(student, sub.id);
     if (!student.completeness) student.completeness = {};
-    if (student.completeness[sub.id] === true || isComplete) {
-      completed++;
+    if (isComplete) {
       student.completeness[sub.id] = true;
     } else {
       student.completeness[sub.id] = false;
     }
+
+    const sGrades = student.grades[sub.id] || { chapters: {} };
+    const chapters = sub.chapters || [];
+
+    chapters.forEach(ch => {
+      if (ch.isHidden) return;
+      const chTasks = ch.tasks || [];
+      const sChGrades = sGrades.chapters && sGrades.chapters[ch.name] ? sGrades.chapters[ch.name] : {};
+      const sTasks = sChGrades.tasks || {};
+
+      chTasks.forEach(t => {
+        totalTasksAllSubjects++;
+        const score = sTasks[t];
+        if (isRecordedScore(score) && parseInt(score, 10) !== 0) {
+          completedTasksAllSubjects++;
+        }
+      });
+
+      totalTasksAllSubjects++;
+      const ulScore = sChGrades.ulangan;
+      if (isRecordedScore(ulScore) && parseInt(ulScore, 10) !== 0) {
+        completedTasksAllSubjects++;
+      }
+    });
   });
 
-  const percentage = Math.round((completed / activeSubjects.length) * 100);
+  const percentage = totalTasksAllSubjects > 0 
+    ? Math.round((completedTasksAllSubjects / totalTasksAllSubjects) * 100)
+    : 100;
+    
   return {
-    total: activeSubjects.length,
-    completed,
+    total: totalTasksAllSubjects,
+    completed: completedTasksAllSubjects,
     percentage,
-    isAllComplete: completed === activeSubjects.length,
+    isAllComplete: completedTasksAllSubjects === totalTasksAllSubjects,
     hasNoSubjects: false
   };
 }
@@ -1227,10 +1295,7 @@ function syncModeToggleActive(viewName) {
 function switchView(viewName) {
   if (viewName === "siswa") {
     syncModeToggleActive("siswa");
-  }
-
-  if (viewName === "siswa" && appState.currentView === "siswa") {
-    // Jika sudah di tampilan siswa dan tombol siswa diklik lagi, reset pencarian (kembali memilih kelas & nama)
+    // Selalu reset UI pencarian saat berpindah ke tab siswa agar dropdown selalu muncul
     if (typeof resetStudentSearchUI === "function") {
       resetStudentSearchUI();
     }
@@ -1349,6 +1414,7 @@ function actualSwitchView(viewName) {
   // Toggle Publish Grades Toggle in Header (Teacher View only)
   const publishToggle = document.getElementById("publish-grades-toggle-container");
   const printBtn = document.getElementById("print-grades-btn");
+  const exportBtn = document.getElementById("header-export-btn");
   if (publishToggle) {
     const showToggle = viewName === "guru" && !!appState.activeTeacherId;
     publishToggle.classList.toggle("d-none", !showToggle);
@@ -1356,6 +1422,10 @@ function actualSwitchView(viewName) {
   if (printBtn) {
     const showPrint = viewName === "guru" && !!appState.activeTeacherId;
     printBtn.classList.toggle("d-none", !showPrint);
+  }
+  if (exportBtn) {
+    const showExport = viewName === "guru" && !!appState.activeTeacherId && appState.teacherActiveTab === "nilai";
+    exportBtn.classList.toggle("d-none", !showExport);
   }
 
   const mainTag = document.querySelector("main");
@@ -1428,6 +1498,16 @@ function switchTeacherTab(tabName) {
 
   // Close dropdown after selecting a tab
   closeSigradeDropdown();
+
+  // Toggle Ekspor Excel Button
+  const exportBtn = document.getElementById("header-export-btn");
+  if (exportBtn) {
+    if (tabName === "nilai" && appState.activeTeacherId) {
+      exportBtn.classList.remove("d-none");
+    } else {
+      exportBtn.classList.add("d-none");
+    }
+  }
 
   if (tabName === "nilai") {
     renderStudentTableHeaders();
@@ -1745,7 +1825,9 @@ function getAllAvailableClasses() {
       fromStudents.push(st.class);
     }
   });
-  return sortClassNames([...new Set([...(appState.classes || []), ...fromStudents])]);
+  // Do NOT use appState.classes because they might be empty "ghost" classes. 
+  // Only return classes that actually have students.
+  return sortClassNames([...new Set(fromStudents)]);
 }
 
 // --- STUDENT SEARCH CLASS & NAME SELECTORS V6 ---
@@ -1793,6 +1875,8 @@ function handleClassSelectChange() {
       searchInput.value = "";
     }
     handleStudentSearch();
+    syncClassDropdownState();
+    syncNameDropdownState();
     return;
   }
 
@@ -1812,6 +1896,9 @@ function handleClassSelectChange() {
   });
 
   nameSelect.disabled = false;
+  
+  syncClassDropdownState();
+  syncNameDropdownState();
 }
 
 function handleNameSelectChange() {
@@ -1822,6 +1909,7 @@ function handleNameSelectChange() {
   const selectedName = nameSelect.value;
   searchInput.value = selectedName || "";
   handleStudentSearch();
+  syncNameDropdownState();
 }
 
 function resetStudentSearchUI() {
@@ -1839,11 +1927,14 @@ function resetStudentSearchUI() {
 // --- DYNAMIC ISLAND CUSTOM DROPDOWN SYSTEM ---
 let activeDiDropdown = null;
 
-function toggleDiDropdown(type) {
+function toggleDiDropdown(event, type) {
+  if (event) {
+    event.stopPropagation();
+  }
   const wrapper = document.getElementById(type + '-dropdown-wrapper');
   const trigger = document.getElementById(type + '-dropdown-trigger');
   if (!wrapper || !trigger) return;
-  if (trigger.classList.contains('disabled')) return;
+  // Let disabled triggers continue so we can show an empty state message to the user
 
   const bar = wrapper.closest('.student-selector-bar');
 
@@ -2195,7 +2286,7 @@ async function handleStudentSearch() {
           <div class="status-banner-icon-wrapper" style="color:var(--danger); display:flex; align-items:center; justify-content:center;"><span class="material-symbols-rounded" style="font-size: 2.2rem;">warning</span></div>
           <div>
             <div class="status-banner-title">Kelengkapan Tugas Belum Terpenuhi</div>
-            <div class="status-banner-desc">Anda masih memiliki <strong>${compDetails.total - compDetails.completed} mata pelajaran</strong> dengan tugas yang belum lengkap.</div>
+            <div class="status-banner-desc">Anda masih memiliki <strong>${compDetails.total - compDetails.completed} tugas/ulangan</strong> yang belum lengkap.</div>
           </div>
         </div>
         <div class="status-banner-action">
@@ -2283,7 +2374,8 @@ async function handleStudentSearch() {
     const teacherNameTitleCase = formatTeacherNameTitleCase(rawTeacher.name);
 
     const scoreInfo = calculateStudentSubjectScore(student, sub.id);
-    const isComplete = student.completeness[sub.id] === true;
+    const isComplete = isStudentSubjectComplete(student, sub.id);
+    student.completeness[sub.id] = isComplete;
 
     // Hitung persentase kelengkapan tugas real-time untuk Ring Mapel Mini
     let totalTasksMapel = 0;
@@ -2348,74 +2440,91 @@ async function handleStudentSearch() {
       let completedTasksCh = 0;
 
       ch.tasks.forEach(t => {
-        const isLacking = isScoreLacking(t.score, scoreInfo.kkm);
+        const isLacking = !isRecordedScore(t.score) || parseInt(t.score, 10) === 0;
         if (!isLacking) completedTasksCh++;
 
         const dirKey = `${ch.name}_${t.name}`;
         const dirConfig = sub.tasksDirectory ? sub.tasksDirectory[dirKey] : null;
           const isHidden = isDirectoryTaskHidden(dirConfig, student.class);
 
-        const lmsBtn = (!isHidden) 
-          ? (isLacking ? `<button class="btn-cta-lms" onclick="openLmsModule('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'task', '${escapeJSAttr(t.name)}')">Kerjakan</button>` : ``)
-          : `<span class="student-task-status locked">Belum dibuka</span>`;
+        let statusTextHTML = "";
+        let actionBtnHTML = "";
+        let checkIconHTML = "";
 
-        const displayScore = appState.publishGrades 
-          ? `<span class="student-task-status ${isLacking ? 'pending' : 'done'}">${isLacking ? 'Belum' : t.score}</span>`
-          : `<span class="status-badge ${t.score > 0 ? 'complete' : 'incomplete'}" style="font-size:0.65rem; padding:1px 6px; display:inline-flex; align-items:center; gap:0.15rem;">${t.score > 0 ? '<span class="material-symbols-rounded" style="font-size:10px;">check</span> Selesai' : '<span class="material-symbols-rounded" style="font-size:10px;">schedule</span> Belum'}</span>`;
-
-        const checkIcon = isLacking
-          ? `<span class="task-check-circle incomplete"><span class="material-symbols-rounded" style="font-size: 11px;">radio_button_unchecked</span></span>`
-          : `<span class="task-check-circle complete"><span class="material-symbols-rounded" style="font-size: 11px;">check</span></span>`;
+        if (isLacking) {
+           checkIconHTML = `<span class="material-symbols-rounded" style="color: #cbd5e1; font-size: 16px;">radio_button_unchecked</span>`;
+           statusTextHTML = ``;
+           actionBtnHTML = `<button style="background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.7rem; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#e0e7ff'" onmouseout="this.style.background='#eef2ff'" onclick="openLmsModule('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'task', '${escapeJSAttr(t.name)}')">Kerjakan</button>`;
+        } else {
+           checkIconHTML = `<span class="material-symbols-rounded" style="color: #10b981; font-size: 16px;">check_circle</span>`;
+           statusTextHTML = appState.publishGrades 
+              ? `<span style="color: #10b981; font-size: 0.75rem; font-weight: 700;">${t.score}</span>`
+              : `<span style="color: #10b981; font-size: 0.75rem; font-weight: 600;">Selesai</span>`;
+           actionBtnHTML = ``; 
+        }
 
         tasksListHTML += `
-          <div class="student-task-row">
-            <span class="student-task-label">${checkIcon}<span class="task-name">${escapeHTML(t.name)}</span></span>
-            <div class="student-task-actions">
-              ${displayScore}
-              ${lmsBtn}
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; gap: 0.25rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; overflow: hidden; max-width: 50%;">
+              ${checkIconHTML}
+              <span style="font-size: 0.85rem; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHTML(t.name)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+              ${statusTextHTML}
+              <div style="min-width: 60px; text-align: right;">${actionBtnHTML}</div>
             </div>
           </div>
         `;
       });
 
-      const isUlLacking = isScoreLacking(ch.ulangan, scoreInfo.kkm);
+      const isUlLacking = !isRecordedScore(ch.ulangan) || parseInt(ch.ulangan, 10) === 0;
       if (!isUlLacking) completedTasksCh++;
 
       const ulDirKey = `${ch.name}_Ulangan`;
       const ulDirConfig = sub.tasksDirectory ? sub.tasksDirectory[ulDirKey] : null;
       const isUlHidden = isDirectoryTaskHidden(ulDirConfig, student.class);
 
-      const ulLmsBtn = (!isUlHidden) 
-        ? (isUlLacking ? `<button class="btn-cta-lms" onclick="openLmsModule('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'ulangan', 'Ulangan')">Kerjakan</button>` : ``)
-        : `<span class="student-task-status locked">Belum dibuka</span>`;
+      let ulStatusTextHTML = "";
+      let ulActionBtnHTML = "";
+      let ulCheckIconHTML = "";
 
-      const ulScoreDisplay = appState.publishGrades 
-        ? `<span class="student-task-status ${isUlLacking ? 'pending' : 'done'}">${isUlLacking ? 'Belum' : ch.ulangan}</span>` 
-        : `<span class="status-badge ${ch.ulangan > 0 ? 'complete' : 'incomplete'}" style="font-size:0.65rem; padding:1px 6px; display:inline-flex; align-items:center; gap:0.15rem;">${ch.ulangan > 0 ? '<span class="material-symbols-rounded" style="font-size:10px;">check</span> Selesai' : '<span class="material-symbols-rounded" style="font-size:10px;">schedule</span> Belum'}</span>`;
+      if (isUlLacking) {
+         ulCheckIconHTML = `<span class="material-symbols-rounded" style="color: #cbd5e1; font-size: 16px;">radio_button_unchecked</span>`;
+         ulStatusTextHTML = ``;
+         ulActionBtnHTML = `<button style="background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.7rem; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#e0e7ff'" onmouseout="this.style.background='#eef2ff'" onclick="openLmsModule('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'ulangan', 'Ulangan')">Kerjakan</button>`;
+      } else {
+         ulCheckIconHTML = `<span class="material-symbols-rounded" style="color: #10b981; font-size: 16px;">check_circle</span>`;
+         ulStatusTextHTML = appState.publishGrades 
+            ? `<span style="color: #10b981; font-size: 0.75rem; font-weight: 700;">${ch.ulangan}</span>`
+            : `<span style="color: #10b981; font-size: 0.75rem; font-weight: 600;">Selesai</span>`;
+         ulActionBtnHTML = ``; 
+      }
+
+      tasksListHTML += `
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; gap: 0.25rem;">
+            <div style="display: flex; align-items: center; gap: 0.4rem; overflow: hidden; max-width: 50%;">
+              ${ulCheckIconHTML}
+              <span style="font-size: 0.85rem; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Ulangan Harian</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
+              ${ulStatusTextHTML}
+              <div style="min-width: 60px; text-align: right;">${ulActionBtnHTML}</div>
+            </div>
+          </div>
+      `;
 
       const isChComplete = completedTasksCh === totalTasksCh;
       
-      const ulCheckIcon = isUlLacking
-        ? `<span class="task-check-circle incomplete"><span class="material-symbols-rounded" style="font-size: 11px;">radio_button_unchecked</span></span>`
-        : `<span class="task-check-circle complete"><span class="material-symbols-rounded" style="font-size: 11px;">check</span></span>`;
-
       chaptersListHTML += `
-        <div class="chapter-card-box">
-          <div class="chapter-division-header" style="margin-top:0;">
-            <span class="chapter-tag-premium">${escapeHTML(ch.name)}</span>
-            <span class="chapter-status-tag ${isChComplete ? 'complete' : 'incomplete'}">
-              ${isChComplete ? 'Tuntas' : 'Belum lengkap'}
+        <div style="background: #fafafa; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.02); display: flex; flex-direction: column;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <span style="font-family: var(--font-heading); font-weight: 700; color: #4338ca; font-size: 0.95rem;">${escapeHTML(ch.name)}</span>
+            <span style="background: ${isChComplete ? '#dcfce7' : '#fef3c7'}; color: ${isChComplete ? '#166534' : '#b45309'}; font-size: 0.7rem; font-weight: 600; padding: 0.25rem 0.6rem; border-radius: 999px;">
+              ${isChComplete ? 'Lengkap' : 'Belum lengkap'}
             </span>
           </div>
-          
-          ${tasksListHTML}
-          
-          <div class="student-task-row">
-            <span class="student-task-label">${ulCheckIcon}<span class="task-name">Ulangan Harian</span></span>
-            <div class="student-task-actions">
-              ${ulScoreDisplay}
-              ${ulLmsBtn}
-            </div>
+          <div style="display: flex; flex-direction: column;">
+            ${tasksListHTML}
           </div>
         </div>
       `;
@@ -2453,14 +2562,7 @@ async function handleStudentSearch() {
         </div>
         
         <div style="display:flex; align-items:center; gap:0.75rem;">
-          <!-- Progress Ring Mapel Mini -->
-          <div style="position:relative; width:44px; height:44px; display:flex; align-items:center; justify-content:center;">
-            <svg class="mini-progress-ring-svg">
-              <circle class="mini-progress-ring-bg" cx="22" cy="22" r="18" />
-              <circle class="mini-progress-ring-circle ${ringColorClass}" cx="22" cy="22" r="18" stroke-dasharray="113" stroke-dashoffset="${dashoffsetMapel}" />
-            </svg>
-            <span style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); font-family:var(--font-heading); font-size:0.62rem; font-weight:800; color:var(--text-primary);">${completionMapelPct}%</span>
-          </div>
+          <!-- Accordion Indicator Icon -->
           
           <!-- Accordion Indicator Icon -->
           <span class="accordion-icon material-symbols-rounded" style="font-size:18px;">expand_more</span>
@@ -2469,9 +2571,9 @@ async function handleStudentSearch() {
 
       <!-- Accordion Body: Berisi rincian materi yang bisa slide-up/down -->
       <div class="accordion-body">
-        <div style="padding: 0.5rem 0 0;">
-          <span class="chapters-section-label">Rincian materi per bab</span>
-          <div class="chapters-grid">
+        <div style="padding: 1.5rem 0 0;">
+          <span class="chapters-section-label" style="display:block; margin-bottom: 1rem; color: #64748b; font-size: 0.85rem;">Rincian materi per bab</span>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
             ${chaptersListHTML}
           </div>
         </div>
@@ -2671,6 +2773,99 @@ function switchStudentSubTab(tabName) {
     if (portalContent) portalContent.classList.remove("d-none");
     renderStudentPortal();
   }
+}
+
+function openStudentChapterDetailModal(studentId, subjectId, chapterName) {
+  const student = appState.students.find(s => s.id === studentId);
+  const subject = appState.subjects.find(s => s.id === subjectId);
+  if (!student || !subject) return;
+
+  const scoreInfo = getStudentSubjectScores(student, subject.id);
+  const ch = scoreInfo.chapters.find(c => c.name === chapterName);
+  if (!ch) return;
+
+  const titleEl = document.getElementById("student-chapter-detail-title");
+  const bodyEl = document.getElementById("student-chapter-detail-body");
+  if (!titleEl || !bodyEl) return;
+
+  titleEl.innerText = `Detail Bab - ${chapterName}`;
+  let html = '';
+
+  const chapterConfig = (subject.chapters || []).find(c => c.name === chapterName);
+  if (chapterConfig && chapterConfig.tasks) {
+    chapterConfig.tasks.forEach(tConf => {
+      const tScore = ch.tasks.find(t => t.name === tConf.name);
+      if (!tScore) return;
+
+      const isLacking = isScoreLacking(tScore.score, scoreInfo.kkm);
+      const dirKey = `${chapterName}_${tConf.name}`;
+      const dirConfig = subject.tasksDirectory ? subject.tasksDirectory[dirKey] : null;
+      const isHidden = isDirectoryTaskHidden(dirConfig, student.class);
+
+      const lmsBtn = isLacking
+        ? (!isHidden ? `<button class="btn-cta-lms" onclick="closeStudentChapterDetailModal(); openLmsModule('${escapeJSAttr(student.id)}', '${escapeJSAttr(subject.id)}', '${escapeJSAttr(chapterName)}', 'task', '${escapeJSAttr(tConf.name)}')">Kerjakan</button>` : `<span class="student-task-status locked">Belum dibuka</span>`)
+        : ``;
+
+      const displayScore = (!isLacking) ? (appState.publishGrades 
+        ? `<span class="student-task-status done">${tScore.score}</span>`
+        : `<span class="status-badge complete" style="font-size:0.65rem; padding:1px 6px; display:inline-flex; align-items:center; gap:0.15rem;"><span class="material-symbols-rounded" style="font-size:10px;">check</span> Selesai</span>`) : ``;
+
+      const checkIcon = isLacking
+        ? `<span class="task-check-circle incomplete"><span class="material-symbols-rounded" style="font-size: 11px;">radio_button_unchecked</span></span>`
+        : `<span class="task-check-circle complete"><span class="material-symbols-rounded" style="font-size: 11px;">check</span></span>`;
+
+      html += `
+        <div class="student-task-row" style="background:var(--bg-card); border-radius:var(--radius-md); padding:0.75rem; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+          <span class="student-task-label" style="display:flex; align-items:center; gap:0.5rem;">${checkIcon}<span class="task-name" style="font-weight:500; font-size:0.9rem;">${escapeHTML(tConf.name)}</span></span>
+          <div class="student-task-actions" style="display:flex; align-items:center; gap:0.75rem;">
+            ${displayScore}
+            ${lmsBtn}
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  const isUlLacking = isScoreLacking(ch.ulangan, scoreInfo.kkm);
+  const ulDirKey = `${chapterName}_Ulangan`;
+  const ulDirConfig = subject.tasksDirectory ? subject.tasksDirectory[ulDirKey] : null;
+  const isUlHidden = isDirectoryTaskHidden(ulDirConfig, student.class);
+
+  const ulLmsBtn = isUlLacking
+    ? (!isUlHidden ? `<button class="btn-cta-lms" onclick="closeStudentChapterDetailModal(); openLmsModule('${escapeJSAttr(student.id)}', '${escapeJSAttr(subject.id)}', '${escapeJSAttr(chapterName)}', 'ulangan', 'Ulangan')">Kerjakan</button>` : `<span class="student-task-status locked">Belum dibuka</span>`)
+    : ``;
+
+  const ulScoreDisplay = (!isUlLacking) ? (appState.publishGrades 
+    ? `<span class="student-task-status done">${ch.ulangan}</span>` 
+    : `<span class="status-badge complete" style="font-size:0.65rem; padding:1px 6px; display:inline-flex; align-items:center; gap:0.15rem;"><span class="material-symbols-rounded" style="font-size:10px;">check</span> Selesai</span>`) : ``;
+
+  const ulCheckIcon = isUlLacking
+    ? `<span class="task-check-circle incomplete"><span class="material-symbols-rounded" style="font-size: 11px;">radio_button_unchecked</span></span>`
+    : `<span class="task-check-circle complete"><span class="material-symbols-rounded" style="font-size: 11px;">check</span></span>`;
+
+  html += `
+    <div class="student-task-row" style="background:var(--bg-card); border-radius:var(--radius-md); padding:0.75rem; border:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
+      <span class="student-task-label" style="display:flex; align-items:center; gap:0.5rem;">${ulCheckIcon}<span class="task-name" style="font-weight:500; font-size:0.9rem;">Ulangan Harian</span></span>
+      <div class="student-task-actions" style="display:flex; align-items:center; gap:0.75rem;">
+        ${ulScoreDisplay}
+        ${ulLmsBtn}
+      </div>
+    </div>
+  `;
+
+  bodyEl.innerHTML = html;
+  
+  const modal = document.getElementById("student-chapter-detail-modal");
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+  }
+}
+
+function closeStudentChapterDetailModal() {
+  const modal = document.getElementById("student-chapter-detail-modal");
+  if (modal) modal.style.display = 'none';
 }
 
 function openLmsModule(studentId, subjectId, chapterName, taskType, taskItemName) {
@@ -3972,14 +4167,12 @@ function renderStudentTableHeaders() {
 
   if (appState.activeTeacherId === "wali-kelas" || appState.activeTeacherId === "t-2") {
     tableHead.innerHTML = `
-      <th class="text-center" style="width: 50px; padding: 0.75rem 0.5rem;">Absen</th>
       <th style="padding-left: 1rem;">Siswa</th>
       <th class="text-center">Rata-rata</th>
       <th class="text-center">Status</th>
     `;
   } else {
     tableHead.innerHTML = `
-      <th class="text-center" style="width: 50px; padding: 0.75rem 0.5rem;">Absen</th>
       <th style="padding-left: 1rem;">Siswa</th>
       <th class="text-center">Nilai Akhir</th>
       <th class="text-center">Status</th>
@@ -4010,7 +4203,9 @@ function renderStudentTable() {
     } else {
       let allAssignedComplete = true;
       assignedSubjects.forEach(s => {
-        if (student.completeness[s.id] !== true) allAssignedComplete = false;
+        const isComp = isStudentSubjectComplete(student, s.id);
+        student.completeness[s.id] = isComp;
+        if (!isComp) allAssignedComplete = false;
       });
       
       if (filterValue === "complete" && !allAssignedComplete) return false;
@@ -4018,6 +4213,16 @@ function renderStudentTable() {
     }
 
     return true;
+  });
+
+  filteredStudents.sort((a, b) => {
+    const aAbs = parseInt(a.absentNo);
+    const bAbs = parseInt(b.absentNo);
+    const aNum = isNaN(aAbs) ? 999 : aAbs;
+    const bNum = isNaN(bAbs) ? 999 : bAbs;
+    
+    if (aNum !== bNum) return aNum - bNum;
+    return (a.name || "").localeCompare(b.name || "");
   });
 
   // CEK APAKAH GURU MENGAJAR DI KELAS INI
@@ -4031,7 +4236,7 @@ function renderStudentTable() {
   }
 
   if (filteredStudents.length === 0 || !isClassTaught) {
-    const colSpan = 4;
+    const colSpan = 3;
     const totalInClass = classFilterValue !== "all" 
       ? appState.students.filter(s => s.class === classFilterValue).length 
       : appState.students.length;
@@ -4109,16 +4314,12 @@ function renderStudentTable() {
         if (calc.isKatrol) hasKatrol = true;
       });
 
-      const avgDisplay = avg === null ? '—' : avg;
+      const avgDisplay = avg === null ? '0' : avg;
       const scoreColor = avg === null ? 'var(--text-muted)' : (avg >= 85 ? '#10b981' : (avg >= 75 ? '#06b6d4' : (avg >= 70 ? '#f59e0b' : '#ef4444')));
 
       tr.innerHTML = `
-        <td class="text-center">
-          <span style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:6px; font-size:0.72rem; font-weight:800; color:var(--indigo); font-family:var(--font-heading);">${absenNo}</span>
-        </td>
-        <td>
-          <span class="table-student-name" id="table-name-${student.id}" style="font-size:0.82rem;">${escapeHTML(student.name)}</span>${genderDisplay}
-          <span style="font-size:0.58rem; background:rgba(99,102,241,0.08); color:var(--indigo); padding:1px 5px; border-radius:3px; margin-left:0.3rem; font-weight:700; display:inline; vertical-align:middle;">${escapeHTML(student.class || 'X-A')}</span>
+        <td style="padding-left: 1rem;">
+          <span class="table-student-name" id="table-name-${student.id}" style="font-size:0.82rem;">${escapeHTML(student.name)}</span>
         </td>
         <td class="text-center">
           <span id="table-score-${student.id}" style="font-weight:800; font-size:0.92rem; font-family:var(--font-heading); color:${hasKatrol && avg !== null ? '#ef4444' : scoreColor};">${avgDisplay}</span>
@@ -4126,7 +4327,7 @@ function renderStudentTable() {
             <span style="font-size:0.5rem; font-weight:700; color:#ef4444;">KKM</span>
           </div>
         </td>
-        <td class="text-center">
+        <td class="text-center" id="table-badge-cell-${student.id}">
           <span class="status-badge ${comp.isAllComplete ? 'complete' : 'incomplete'}" style="display:inline-flex; align-items:center; gap:0.2rem;">
             ${comp.isAllComplete 
               ? '<span class="material-symbols-rounded" style="font-size:13px; color:#34d399;">check_circle</span> Lengkap' 
@@ -4143,17 +4344,14 @@ function renderStudentTable() {
       }
 
       const scoreInfo = calculateStudentSubjectScore(student, sub.id);
-      const isComplete = student.completeness[sub.id] === true;
+      const isComplete = isStudentSubjectComplete(student, sub.id);
+      student.completeness[sub.id] = isComplete;
       const hasScores = hasAnyRecordedGradesForSubject(student, sub.id);
-      const scoreDisplay = hasScores ? scoreInfo.asli : '—';
+      const scoreDisplay = hasScores ? scoreInfo.asli : '0';
 
       tr.innerHTML = `
-        <td class="text-center">
-          <span style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:6px; font-size:0.72rem; font-weight:800; color:var(--indigo); font-family:var(--font-heading);">${absenNo}</span>
-        </td>
-        <td>
-          <span class="table-student-name" id="table-name-${student.id}" style="font-size:0.82rem;">${escapeHTML(student.name)}</span>${genderDisplay}
-          <span style="font-size:0.58rem; background:rgba(99,102,241,0.08); color:var(--indigo); padding:1px 5px; border-radius:3px; margin-left:0.3rem; font-weight:700; display:inline; vertical-align:middle;">${escapeHTML(student.class || 'X-A')}</span>
+        <td style="padding-left: 1rem;">
+          <span class="table-student-name" id="table-name-${student.id}" style="font-size:0.82rem;">${escapeHTML(student.name)}</span>
         </td>
         <td class="text-center">
           <span id="table-score-${student.id}" style="font-weight:800; font-size:0.92rem; font-family:var(--font-heading); color:${hasScores && scoreInfo.isKatrol ? '#ef4444' : (hasScores ? 'var(--emerald)' : 'var(--text-muted)')};">${scoreDisplay}</span>
@@ -4161,7 +4359,7 @@ function renderStudentTable() {
             <span style="font-size:0.5rem; font-weight:700; color:#ef4444;">KKM</span>
           </div>
         </td>
-        <td class="text-center">
+        <td class="text-center" id="table-badge-cell-${student.id}">
           <span class="status-badge ${isComplete ? 'complete' : 'incomplete'}" style="display:inline-flex; align-items:center; gap:0.2rem;">
             ${isComplete 
               ? '<span class="material-symbols-rounded" style="font-size:13px; color:#34d399;">check_circle</span> Lengkap' 
@@ -4260,9 +4458,11 @@ function renderTeacherRightPane() {
   
   let subjectsHTML = "";
   activeSubjects.forEach(sub => {
+    if (!isSubjectValidForStudentClass(sub.name, student.class)) return;
     const calc = calculateStudentSubjectScore(student, sub.id);
     const teacher = appState.teachers.find(t => t.id === sub.teacherId) || { name: "Guru Pengampu" };
-    const isComplete = student.completeness[sub.id] === true;
+    const isComplete = isStudentSubjectComplete(student, sub.id);
+    student.completeness[sub.id] = isComplete;
     
     // Determine selected chapter index defensively
     let chIdx = Math.min(appState.currSelectedChapterIdx || 0, calc.chapters.length - 1);
@@ -4285,8 +4485,8 @@ function renderTeacherRightPane() {
             <div style="display:flex; align-items:center; gap:0.3rem; margin-left:auto;">
               <span style="font-size:0.6rem; color:var(--text-secondary); font-weight:600;">Nilai:</span>
               <input type="number" min="0" max="100" class="inline-grade-input" style="width:54px; height:24px; font-size:0.75rem; font-weight:700; padding:0 0.25rem; border-radius:4px; text-align:center;" 
-                value="${t.score}"
-                oninput="updateInlineGrade('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'task', '${escapeJSAttr(t.name)}', this.value)" placeholder="-">
+                value="${t.score !== undefined && t.score !== '' ? t.score : '0'}"
+                oninput="updateInlineGrade('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'task', '${escapeJSAttr(t.name)}', this.value)" placeholder="0">
             </div>
           </div>
         `;
@@ -4324,8 +4524,8 @@ function renderTeacherRightPane() {
             <div style="display:flex; align-items:center; gap:0.3rem; margin-left:auto;">
               <span style="font-size:0.6rem; color:var(--text-secondary); font-weight:600;">Nilai:</span>
               <input type="number" min="0" max="100" class="inline-grade-input" style="width:54px; height:24px; font-size:0.75rem; font-weight:700; padding:0 0.25rem; border-radius:4px; text-align:center;" 
-                value="${ch.ulangan}"
-                oninput="updateInlineGrade('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'ulangan', null, this.value)" placeholder="-">
+                value="${ch.ulangan !== undefined && ch.ulangan !== '' ? ch.ulangan : '0'}"
+                oninput="updateInlineGrade('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}', 'ulangan', null, this.value)" placeholder="0">
             </div>
           </div>
         </div>
@@ -4357,20 +4557,9 @@ function renderTeacherRightPane() {
           </div>
           
           <div style="display:flex; align-items:center; gap:0.6rem; margin-top:2px; flex-wrap:wrap; justify-content:flex-end;">
-            ${calc.asli < sub.kkm ? `
-            <button onclick="triggerAIKatrol('${escapeJSAttr(student.id)}')" class="katrol-ai-btn-gemini" title="Terdapat nilai di bawah KKM, klik untuk Katrol dengan AI" style="padding: 0.15rem 0.5rem; font-size: 0.6rem; height: 24px; border-radius:4px;">
-              <span class="material-symbols-rounded" style="font-size: 13px; position: relative; z-index: 1;">auto_awesome</span> 
-              <span style="position: relative; z-index: 1; letter-spacing: 0.2px;">Katrol AI</span>
-            </button>
-            ` : ''}
-            <!-- Subject task toggle switch -->
-            <div class="toggle-switch-wrapper" style="display:flex; align-items:center; gap:0.35rem;">
-              <label class="toggle-switch" style="transform:scale(0.8);">
-                <input type="checkbox" id="complete-${student.id}-${sub.id}" ${isComplete ? "checked" : ""} 
-                  onchange="updateInlineCompleteness('${escapeJSAttr(student.id)}', '${escapeJSAttr(sub.id)}', this.checked)">
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="toggle-label" style="font-size:0.62rem; font-weight:700; color:var(--text-primary);">Lengkap</span>
+            <!-- Subject task automatic status badge -->
+            <div id="complete-badge-${student.id}-${sub.id}" class="status-badge ${isComplete ? 'complete' : 'incomplete'}" style="display:inline-flex; align-items:center; gap:0.2rem; font-size:0.65rem; margin-left:0.5rem; padding: 0.15rem 0.4rem;">
+              ${isComplete ? '<span class="material-symbols-rounded" style="font-size:13px; color:#34d399;">check_circle</span> Lengkap' : '<span class="material-symbols-rounded" style="font-size:13px; color:#d4a053;">radio_button_unchecked</span> Belum'}
             </div>
           </div>
         </div>
@@ -4402,7 +4591,7 @@ function renderTeacherRightPane() {
           <div>
             <div style="font-size:0.58rem; color:var(--text-secondary);">Nilai Akhir (KKM: ${sub.kkm})</div>
             <div style="font-weight:800; font-size:0.9rem; color:${calc.isKatrol ? '#ef4444' : 'var(--success)'};" id="akhir-${student.id}-${sub.id}">
-              ${hasAnyRecordedGradesForSubject(student, sub.id) ? calc.akhir : '—'}
+              ${hasAnyRecordedGradesForSubject(student, sub.id) ? calc.akhir : '0'}
             </div>
           </div>
         </div>
@@ -4413,54 +4602,47 @@ function renderTeacherRightPane() {
   
   detailPane.innerHTML = `
     <!-- Detail Pane Header with Close Button (compact) -->
-    <div style="display:flex; justify-content:center; align-items:center; border-bottom:1px solid var(--border); padding-bottom:1.5rem; margin-bottom:0.5rem; position:relative;">
+    <div style="display:flex; justify-content:center; align-items:center; border-bottom:1px solid var(--border); padding-bottom:0.5rem; margin-bottom:0.5rem; position:relative;">
       <!-- Close Button (Absolute Top Right) -->
-      <button onclick="closeTeacherRightPane()" class="icon-btn" style="position:absolute; top:0; right:0; width:26px; height:26px; border-radius:50%; font-size:0.75rem; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); color:var(--text-secondary); cursor:pointer; z-index:10;" title="Tutup Detail">
-        ✏
+      <button onclick="closeTeacherRightPane()" class="icon-btn" style="position:absolute; top:0; right:0; width:24px; height:24px; border-radius:50%; font-size:0.7rem; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); color:var(--text-secondary); cursor:pointer; z-index:10;" title="Tutup Detail">
+        o?
       </button>
       
       <!-- Center Wrapper for Photo and Info -->
-      <div style="display:flex; align-items:center; gap:1.5rem; max-width: 90%;">
+      <div style="display:flex; align-items:center; gap:0.6rem; max-width: 95%;">
         
-        <!-- Jumbo Photo Container -->
-        <div style="position: relative; width: 150px; height: 250px; border-radius: 12px; overflow: hidden; background: var(--primary-grad); box-shadow: 0 6px 16px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Klik untuk mengubah foto" onclick="document.getElementById('photo-upload-${student.id}').click()">
+        <!-- Micro Photo Container -->
+        <div style="position: relative; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: var(--primary-grad); box-shadow: 0 2px 6px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" title="Klik untuk mengubah foto" onclick="document.getElementById('photo-upload-${student.id}').click()">
           ${student.photoBase64 ? 
             `<img src="${student.photoBase64}" alt="Foto ${escapeHTML(student.name)}" style="width: 100%; height: 100%; object-fit: cover;">` : 
-            `<span style="color:white; font-family:var(--font-heading); font-weight:800; font-size:3.5rem;">${initials}</span>`
+            `<span style="color:white; font-family:var(--font-heading); font-weight:800; font-size:0.85rem;">${initials}</span>`
           }
-          <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); height: 30px; display: flex; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
-            <span class="material-symbols-rounded" style="font-size: 16px; color: white;">photo_camera</span>
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); height: 12px; display: flex; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+            <span class="material-symbols-rounded" style="font-size: 9px; color: white;">photo_camera</span>
           </div>
         </div>
         <input type="file" id="photo-upload-${student.id}" style="display:none;" accept="image/*" onchange="uploadStudentPhoto('${escapeJSAttr(student.id)}', this)">
         
-        <!-- Info Container (Left aligned text) -->
+        <!-- Info Container (Inline text) -->
         <div style="display: flex; flex-direction: column; align-items: flex-start; text-align: left; width: 100%;">
           
           <!-- View State -->
-          <div id="profile-view-${student.id}" style="display: flex; flex-direction: column; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.8rem;">
-              <h4 style="font-family:var(--font-heading); font-size:1.3rem; font-weight:800; color:var(--text-primary); margin:0; line-height:1.2;">
+          <div id="profile-view-${student.id}" style="display: flex; width: 100%; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+            <div style="display: flex; flex-direction: column; gap: 0.2rem; flex: 1;">
+              <h4 style="font-family:var(--font-heading); font-size:0.9rem; font-weight:800; color:var(--text-primary); margin:0; line-height:1.2; word-break: break-word;">
                 ${escapeHTML(student.name)}
               </h4>
+              <span style="font-size:0.65rem; color:var(--text-secondary); font-weight:700;">
+                ${escapeHTML(student.class || '-')} | ${student.absentNo !== undefined ? student.absentNo : '-'} | ${student.gender === 'L' ? 'L' : (student.gender === 'P' ? 'P' : '-')}
+              </span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.2rem; flex-shrink: 0; margin-top: 0.1rem;">
               ${isWali ? 
-                `<button onclick="document.getElementById('profile-view-${student.id}').style.display='none'; document.getElementById('profile-edit-${student.id}').style.display='flex';" class="icon-btn" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); color:var(--text-secondary); border-radius:4px; width:28px; height:28px; display:flex; align-items:center; justify-content:center;" title="Edit Data Siswa"><span class="material-symbols-rounded" style="font-size:16px;">settings</span></button>` 
+                `<button onclick="document.getElementById('profile-view-${student.id}').style.display='none'; document.getElementById('profile-edit-${student.id}').style.display='flex';" class="icon-btn" style="background:transparent; border:none; color:var(--text-secondary); padding:0; height:18px; width:18px; display:flex; align-items:center; justify-content:center;" title="Edit Data Siswa"><span class="material-symbols-rounded" style="font-size:14px;">settings</span></button>` 
               : ''}
               ${student.photoBase64 ? 
-                `<button onclick="deleteStudentPhoto('${escapeJSAttr(student.id)}')" class="icon-btn" style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); color:var(--rose); border-radius:4px; width:28px; height:28px; display:flex; align-items:center; justify-content:center;" title="Hapus foto"><span class="material-symbols-rounded" style="font-size:16px;">delete</span></button>` 
+                `<button onclick="deleteStudentPhoto('${escapeJSAttr(student.id)}')" class="icon-btn" style="background:transparent; border:none; color:var(--rose); padding:0; height:18px; width:18px; display:flex; align-items:center; justify-content:center;" title="Hapus foto"><span class="material-symbols-rounded" style="font-size:14px;">delete</span></button>` 
               : ''}
-            </div>
-            
-            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
-              <span style="font-size:0.8rem; color:var(--text-secondary); display:flex; align-items:center; gap:0.4rem;">
-                <span class="material-symbols-rounded" style="font-size: 16px; opacity: 0.7;">school</span> Kelas: <strong style="color:var(--text-primary);">${escapeHTML(student.class || 'X-A')}</strong>
-              </span>
-              <span style="font-size:0.8rem; color:var(--text-secondary); display:flex; align-items:center; gap:0.4rem;">
-                <span class="material-symbols-rounded" style="font-size: 16px; opacity: 0.7;">format_list_numbered</span> Absen: <strong style="color:var(--text-primary);">${student.absentNo !== undefined ? student.absentNo : '-'}</strong>
-              </span>
-              <span style="font-size:0.8rem; color:var(--text-secondary); display:flex; align-items:center; gap:0.4rem;">
-                <span class="material-symbols-rounded" style="font-size: 16px; opacity: 0.7;">wc</span> Gender: <strong style="color:var(--text-primary);">${student.gender === 'L' ? 'Laki-laki' : (student.gender === 'P' ? 'Perempuan' : '-')}</strong>
-              </span>
             </div>
           </div>
           
@@ -4615,9 +4797,12 @@ function updateInlineGrade(studentId, subjectId, chapterName, gradeType, taskNam
   const isNowComplete = isStudentSubjectComplete(student, subjectId);
   student.completeness[subjectId] = isNowComplete;
 
-  const checkbox = document.getElementById(`complete-${studentId}-${subjectId}`);
-  if (checkbox) {
-    checkbox.checked = isNowComplete;
+  const badgeEl = document.getElementById(`complete-badge-${studentId}-${subjectId}`);
+  if (badgeEl) {
+    badgeEl.className = `status-badge ${isNowComplete ? 'complete' : 'incomplete'}`;
+    badgeEl.innerHTML = isNowComplete 
+      ? '<span class="material-symbols-rounded" style="font-size:13px; color:#34d399;">check_circle</span> Lengkap' 
+      : '<span class="material-symbols-rounded" style="font-size:13px; color:#d4a053;">radio_button_unchecked</span> Belum';
   }
 
   // Update table row ratio, percentage, and badge Cell
@@ -4631,14 +4816,18 @@ function updateInlineGrade(studentId, subjectId, chapterName, gradeType, taskNam
   if (badgeCell) {
     if (appState.activeTeacherId === "wali-kelas" || appState.activeTeacherId === "t-2") {
       badgeCell.innerHTML = `
-        <span class="status-badge ${comp.isAllComplete ? 'complete' : 'incomplete'}">
-          ${comp.isAllComplete ? '✔ <span class="hide-on-tablet">Lengkap</span>' : '❌ <span class="hide-on-tablet">Belum Lengkap</span>'}
+        <span class="status-badge ${comp.isAllComplete ? 'complete' : 'incomplete'}" style="display:inline-flex; align-items:center; gap:0.2rem;">
+          ${comp.isAllComplete 
+            ? '<span class="material-symbols-rounded" style="font-size:13px; color:#34d399;">check_circle</span> Lengkap' 
+            : '<span class="material-symbols-rounded" style="font-size:13px; color:#d4a053;">radio_button_unchecked</span> Belum'}
         </span>
       `;
     } else {
       badgeCell.innerHTML = `
-        <span class="status-badge ${isNowComplete ? 'complete' : 'incomplete'}">
-          ${isNowComplete ? '✔ <span class="hide-on-tablet">Lengkap</span>' : '❌ <span class="hide-on-tablet">Belum Lengkap</span>'}
+        <span class="status-badge ${isNowComplete ? 'complete' : 'incomplete'}" style="display:inline-flex; align-items:center; gap:0.2rem;">
+          ${isNowComplete 
+            ? '<span class="material-symbols-rounded" style="font-size:13px; color:#34d399;">check_circle</span> Lengkap' 
+            : '<span class="material-symbols-rounded" style="font-size:13px; color:#d4a053;">radio_button_unchecked</span> Belum'}
         </span>
       `;
     }
@@ -5165,8 +5354,8 @@ function renderTeacherDashboard() {
       
       // Sort by average descending
       const sortedByAvg = [...clsStudents].sort((a, b) => b.avg - a.avg);
-      const top3 = sortedByAvg.slice(0, 3);
-      const needsAttention = sortedByAvg.filter(st => st.incomplete);
+      const top3 = sortedByAvg.filter(st => st.avg !== null).slice(0, 3);
+      const needsAttention = sortedByAvg.filter(st => st.incomplete && st.avg !== null);
       
       let top3Html = "";
       if (top3.length === 0) {
@@ -5307,7 +5496,7 @@ function updateTeacherStats() {
         gradePointsCount++;
         
         totalTasksAccum++;
-        if (student.completeness[sub.id] === true) completedTasksAccum++;
+        if (isStudentSubjectComplete(student, sub.id)) completedTasksAccum++;
       });
       
       let isSubIncomplete = false;
@@ -5328,7 +5517,7 @@ function updateTeacherStats() {
         gradePointsCount++;
 
         totalTasksAccum++;
-        if (student.completeness[sub.id] === true) {
+        if (isStudentSubjectComplete(student, sub.id)) {
           completedTasksAccum++;
         }
       });
@@ -5531,13 +5720,17 @@ function renderSubjectsList() {
       const totalWeightSum = chTasks.reduce((acc, t) => acc + (ch.weights[t] !== undefined ? parseInt(ch.weights[t], 10) : 1), 0) + parseInt(ulWeight, 10);
 
       chaptersHTML += `
-        <div class="config-chapter-block">
+        <div class="config-chapter-block" ${ch.isHidden ? 'style="opacity:0.6;"' : ''}>
           <div class="config-chapter-block__header">
             <div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">
               <span class="config-chapter-block__title">${escapeHTML(ch.name)}</span>
               <span class="config-weight-badge">Total bobot: ${totalWeightSum}</span>
             </div>
-            <button class="icon-btn delete-btn" style="width:24px; height:24px;" title="Hapus bab" onclick="deleteChapterFromSubject('${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}')"><span class="material-symbols-rounded" style="font-size:14px;">delete</span></button>
+            <div style="display:flex; align-items:center; gap:0.2rem;">
+              <button class="icon-btn secondary-btn" style="width:24px; height:24px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent;" title="${ch.isHidden ? 'Tampilkan Bab' : 'Sembunyikan Bab'}" onclick="toggleChapterVisibility('${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}')"><span class="material-symbols-rounded" style="font-size:14px; color:var(--text-secondary);">${ch.isHidden ? 'visibility_off' : 'visibility'}</span></button>
+              <button class="icon-btn secondary-btn" style="width:24px; height:24px; padding:0; display:flex; align-items:center; justify-content:center; background:transparent;" title="Ubah Nama Bab" onclick="renameChapterInSubject('${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}')"><span class="material-symbols-rounded" style="font-size:14px; color:var(--text-secondary);">edit</span></button>
+              <button class="icon-btn delete-btn" style="width:24px; height:24px;" title="Hapus bab" onclick="deleteChapterFromSubject('${escapeJSAttr(sub.id)}', '${escapeJSAttr(ch.name)}')"><span class="material-symbols-rounded" style="font-size:14px;">delete</span></button>
+            </div>
           </div>
 
           <div>
@@ -5666,7 +5859,7 @@ function handleAddSubject(e) {
     teacherId: teacherId,
     kkm: kkm,
     chapters: [
-      { name: "Bab 1", tasks: ["Tugas 1"] } 
+      { name: "Bab 1 (Judul Materi)", tasks: ["Tugas 1"] } 
     ]
   });
 
@@ -5800,12 +5993,23 @@ function deleteSubject(subjectId) {
 
 function addChapterToSubject(subId) {
   const inp = document.getElementById(`add-chapter-input-${subId}`);
-  const chName = inp.value.trim();
+  const chTitle = inp.value.trim();
 
-  if (!chName) return;
+  if (!chTitle) return;
 
   const sub = appState.subjects.find(s => s.id === subId);
   if (!sub) return;
+
+  let maxBab = 0;
+  sub.chapters.forEach(c => {
+    const match = c.name.match(/^Bab\s+(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxBab) maxBab = num;
+    }
+  });
+  const nextBabNumber = maxBab + 1;
+  const chName = `Bab ${nextBabNumber} (${chTitle})`;
 
   const isExist = sub.chapters.some(c => c.name.toLowerCase() === chName.toLowerCase());
   if (isExist) {
@@ -5846,6 +6050,56 @@ function deleteChapterFromSubject(subId, chName) {
 
     saveData();
   }
+}
+
+window.toggleChapterVisibility = function(subId, chName) {
+  const sub = appState.subjects.find(s => s.id === subId);
+  if (!sub) return;
+  const ch = sub.chapters.find(c => c.name === chName);
+  if (!ch) return;
+  ch.isHidden = !ch.isHidden;
+  saveData();
+};
+
+function renameChapterInSubject(subId, oldChName) {
+  const sub = appState.subjects.find(s => s.id === subId);
+  if (!sub) return;
+
+  let currentTitle = oldChName;
+  const match = oldChName.match(/^(Bab\s+\d+)(?:\s*\((.*?)\))?$/i);
+  let prefix = "";
+  if (match) {
+    prefix = match[1];
+    currentTitle = match[2] || "Judul Materi";
+  }
+
+  const newTitle = prompt(`Masukkan judul materi baru untuk "${currentTitle}":`, currentTitle);
+  if (!newTitle || newTitle.trim() === "" || newTitle.trim() === currentTitle) {
+    return;
+  }
+  
+  const finalTitle = newTitle.trim();
+  const finalName = prefix ? `${prefix} (${finalTitle})` : finalTitle;
+  if (sub.chapters.some(c => c.name.toLowerCase() === finalName.toLowerCase())) {
+    alert(`Bab dengan nama "${finalName}" sudah ada!`);
+    return;
+  }
+
+  // Update chapter name in subject
+  const ch = sub.chapters.find(c => c.name === oldChName);
+  if (ch) {
+    ch.name = finalName;
+  }
+
+  // Update chapter name in students' grades
+  appState.students.forEach(st => {
+    if (st.grades[subId] && st.grades[subId].chapters && st.grades[subId].chapters[oldChName]) {
+      st.grades[subId].chapters[finalName] = st.grades[subId].chapters[oldChName];
+      delete st.grades[subId].chapters[oldChName];
+    }
+  });
+
+  saveData();
 }
 
 function addTaskToChapter(subId, chName) {
@@ -6947,9 +7201,7 @@ function populateTeacherClassFilter() {
 
 // Helper: Mendapatkan kelas yang diajar minimal oleh satu guru
 function getActiveClassesTaughtByTeachers() {
-  const baseClasses = appState.classes && appState.classes.length > 0 
-    ? appState.classes 
-    : [];
+  const baseClasses = getAllAvailableClasses();
   
   const taughtClasses = new Set();
   if (appState.teachers) {
@@ -7063,6 +7315,16 @@ function renderKesiswaanTab() {
     return true;
   });
 
+  filtered.sort((a, b) => {
+    const aAbs = parseInt(a.absentNo);
+    const bAbs = parseInt(b.absentNo);
+    const aNum = isNaN(aAbs) ? 999 : aAbs;
+    const bNum = isNaN(bAbs) ? 999 : bAbs;
+    
+    if (aNum !== bNum) return aNum - bNum;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
@@ -7166,8 +7428,8 @@ function isStudentSubjectComplete(student, subjectId) {
 
   const sGrades = student.grades[subjectId] || { chapters: {} };
   const chapters = subject.chapters || [];
-  let hasReleasedWork = false;
-  let allReleasedComplete = true;
+  
+  let allComplete = true;
 
   chapters.forEach(ch => {
     const chTasks = ch.tasks || [];
@@ -7175,22 +7437,20 @@ function isStudentSubjectComplete(student, subjectId) {
     const sTasks = sChGrades.tasks || {};
 
     chTasks.forEach(t => {
-      const dirKey = `${ch.name}_${t}`;
-      const tDir = subject.tasksDirectory?.[dirKey];
-      if (!isDirectoryTaskReleased(tDir, student.class)) return;
-      hasReleasedWork = true;
-      if (isScoreLacking(sTasks[t], subject.kkm)) allReleasedComplete = false;
+      const score = sTasks[t];
+      // Jika nilai masih default "0" (atau belum diisi) maka status menjadi belum lengkap
+      if (!isRecordedScore(score) || parseInt(score, 10) === 0) {
+        allComplete = false;
+      }
     });
 
-    const ulDirKey = `${ch.name}_Ulangan`;
-    const ulDir = subject.tasksDirectory?.[ulDirKey];
-    if (isDirectoryTaskReleased(ulDir, student.class)) {
-      hasReleasedWork = true;
-      if (isScoreLacking(sChGrades.ulangan, subject.kkm)) allReleasedComplete = false;
+    const ulScore = sChGrades.ulangan;
+    if (!isRecordedScore(ulScore) || parseInt(ulScore, 10) === 0) {
+      allComplete = false;
     }
   });
 
-  return !hasReleasedWork || allReleasedComplete;
+  return allComplete;
 }
 
 // --- TABS RENDERING FOR CLASSES ---
@@ -7202,18 +7462,14 @@ function renderClassTabs() {
   
   if (allClassContainer) {
     allClassContainer.innerHTML = "";
-    const btnAll = document.createElement("button");
-    btnAll.className = "sidebar-class-btn" + (appState.teacherClassFilter === "all" ? " active" : "");
-    btnAll.innerHTML = `<span class="class-label-text">Semua</span>`;
-    btnAll.title = "Semua Kelas";
-    btnAll.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      appState.teacherClassFilter = "all";
-      renderClassTabs();
-      renderStudentTable();
-    };
-    allClassContainer.appendChild(btnAll);
+  }
+  
+  const activeClasses = getActiveClassesTaughtByTeachers();
+  if (appState.teacherClassFilter === "all" || !appState.teacherClassFilter) {
+    appState.teacherClassFilter = activeClasses.length > 0 ? [...activeClasses].sort()[0] : null;
+  }
+  if (appState.kesiswaanClassFilter === "all" || !appState.kesiswaanClassFilter) {
+    appState.kesiswaanClassFilter = activeClasses.length > 0 ? [...activeClasses].sort()[0] : null;
   }
   
   if (sidebarTabsContainer) {
@@ -7247,19 +7503,7 @@ function renderClassTabs() {
   if (teacherTabsContainer) {
     teacherTabsContainer.innerHTML = "";
     
-    // Add "Semua" button
-    const btnAll = document.createElement("button");
-    btnAll.className = "action-btn" + (appState.teacherClassFilter === "all" ? "" : " secondary-btn");
-    btnAll.style.fontSize = "0.75rem";
-    btnAll.style.padding = "0.3rem 0.75rem";
-    btnAll.innerText = "Semua";
-    btnAll.onclick = (e) => {
-      e.preventDefault();
-      appState.teacherClassFilter = "all";
-      renderClassTabs();
-      renderStudentTable();
-    };
-    teacherTabsContainer.appendChild(btnAll);
+    // Removed "Semua" button
     
     // Add class buttons
     const activeClasses = getActiveClassesTaughtByTeachers();
@@ -7304,19 +7548,7 @@ function renderClassTabs() {
       kesiswaanTabsContainer.appendChild(btn);
     });
 
-    // Add "Semua Kelas" tab on the far right
-    const btnAll = document.createElement("button");
-    btnAll.className = currentFilter === "all" ? "action-btn" : "action-btn secondary-btn";
-    btnAll.style.fontSize = "0.78rem";
-    btnAll.style.padding = "0.35rem 0.85rem";
-    btnAll.innerText = "Semua Kelas";
-    btnAll.onclick = (e) => {
-      e.preventDefault();
-      appState.kesiswaanClassFilter = "all";
-      renderClassTabs();
-      renderKesiswaanTab();
-    };
-    kesiswaanTabsContainer.appendChild(btnAll);
+    // Removed "Semua Kelas" tab
   }
 }
 
@@ -7623,7 +7855,7 @@ function normalizeBrowserClassName(raw) {
 }
 
 function fixMalformedCsvRow(line) {
-  return line.replace(/(\d),,,,(\d),([A-Za-z])/g, '$1,$3');
+  return line;
 }
 
 function uploadStudentCsv(event) {
@@ -7636,7 +7868,16 @@ function uploadStudentCsv(event) {
     const lines = text.split(/\r?\n/);
     if (lines.length === 0) return;
 
-    const firstLine = lines[0].trim();
+    let firstLine = (lines[0] || "").trim();
+    if (!firstLine) return;
+    
+    let hasSep = false;
+    if (firstLine.toLowerCase().startsWith("sep=")) {
+      if (lines.length > 1) {
+        firstLine = (lines[1] || "").trim();
+        hasSep = true;
+      }
+    }
     const delimiter = firstLine.includes(";") ? ";" : ",";
     
     // Check if it's the unified template format (first line has "Kelas ")
@@ -7655,8 +7896,10 @@ function uploadStudentCsv(event) {
           classHeaders.push({ name: normalizeBrowserClassName(rawName), startCol: c });
         }
       }
+      
+      // Removed eager classesFound population so empty classes in headers are ignored
 
-      const startIdx = firstLine.toLowerCase().startsWith("sep=") ? 3 : 2;
+      const startIdx = hasSep ? 3 : 2;
       for (let i = startIdx; i < lines.length; i++) {
         const line = fixMalformedCsvRow(lines[i].trim());
         if (!line) continue;
@@ -7669,7 +7912,7 @@ function uploadStudentCsv(event) {
           const jkRaw = (cols[ch.startCol + 2] || "L").trim().toUpperCase();
           const jk = (jkRaw === "P" || jkRaw === "PEREMPUAN" || jkRaw === "FEMALE") ? "P" : "L";
 
-          if (nama) {
+          if (nama && nama !== "-" && nama !== "KOSONG" && nama !== "N/A" && nama !== "#N/A") {
             parsed.push({ absen, nama, jk, kelas: ch.name });
             classesFound.add(ch.name);
           }
@@ -7711,7 +7954,7 @@ function uploadStudentCsv(event) {
         if (!line) continue;
         const cols = line.split(delimiter).map(c => c.trim().replace(/^"|"$/g, ""));
         const nama = (cols[colNama] || "").trim().toUpperCase();
-        if (!nama) continue;
+        if (!nama || nama === "-" || nama === "KOSONG" || nama === "N/A" || nama === "#N/A") continue;
         
         let kelas = normalizeBrowserClassName(cols[colKelas] || "");
         if (!kelas) kelas = "UNASSIGNED";
@@ -7731,16 +7974,12 @@ function uploadStudentCsv(event) {
       return;
     }
 
-    // Process classes: register new classes
-    classesFound.forEach(k => {
-      if (!appState.classes.includes(k)) {
-        appState.classes.push(k);
-      }
-    });
+    // Process classes: register new classes (full replace)
+    appState.classes = Array.from(classesFound);
     appState.classes.sort();
 
-    // Remove all existing students for the classes that are present in the CSV
-    appState.students = appState.students.filter(st => !classesFound.has(st.class));
+    // Remove ALL existing students to ensure classes not in CSV are fully deleted
+    appState.students = [];
 
     // Add imported students
     parsed.forEach(st => {
@@ -9603,6 +9842,7 @@ function renderStudentCurriculumDirectory() {
   listContainer.innerHTML = "";
 
   (subject.chapters || []).forEach(ch => {
+    if (ch.isHidden) return;
     const chHeader = document.createElement("div");
     chHeader.className = "task-dir-chapter-header";
     chHeader.innerHTML = `
@@ -10859,7 +11099,7 @@ function syncReportSubjectForClass(className) {
 
 function switchReportGradeTab(grade) {
   appState.reportGradeFilter = grade;
-  const allClasses = getAllAvailableClasses();
+  const allClasses = [...new Set(appState.students.map(s => s.class).filter(Boolean))].sort();
   const gradeClasses = allClasses.filter((c) => c.startsWith(grade));
   const classesWithStudents = [...new Set(appState.students.map((s) => s.class).filter(Boolean))];
   const firstWithStudents = gradeClasses.find((c) => classesWithStudents.includes(c));
@@ -10880,13 +11120,13 @@ function switchReportClassTab(className) {
 window.switchReportClassTab = switchReportClassTab;
 
 function formatReportScoreDisplay(score) {
-  if (!isRecordedScore(score)) return '—';
+  if (!isRecordedScore(score)) return '0';
   return score;
 }
 
 function formatReportTaskAverage(tasks) {
   const recorded = (tasks || []).filter((t) => isRecordedScore(t.score)).map((t) => Number(t.score));
-  if (recorded.length === 0) return '—';
+  if (recorded.length === 0) return '0';
   return Math.round((recorded.reduce((sum, val) => sum + val, 0) / recorded.length) * 10) / 10;
 }
 

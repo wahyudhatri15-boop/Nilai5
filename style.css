@@ -1138,6 +1138,7 @@ main {
   transition: all 0.45s var(--spring-bounce);
   position: relative;
   overflow: visible;
+  z-index: 100; /* Ensure dropdown menu is above subsequent cards */
 }
 
 .student-selector-bar:hover {
@@ -1205,7 +1206,6 @@ main {
 .di-dropdown-trigger.disabled {
   opacity: 0.3;
   cursor: not-allowed;
-  pointer-events: none;
 }
 
 .di-trigger-icon {

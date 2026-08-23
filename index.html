@@ -209,7 +209,12 @@
             <span id="active-term-label" style="color: var(--indigo); font-weight: 700; font-size: 0.78rem; font-family: var(--font-body);">2026/2027 - Ganjil (I)</span>
           </div>
 
-          <!-- Export Excel Button moved to Direktori Nilai -->
+          <!-- Export Excel Button -->
+          <button id="header-export-btn" onclick="exportGradesToExcel()" class="ui-outline-btn d-none" style="height: 32px; padding: 0 12px; font-size: 0.8rem;">
+            <span class="material-symbols-rounded" style="font-size: 16px;">table_chart</span>
+            Ekspor Excel
+          </button>
+
           <!-- Publish Grades Toggle -->
           <div id="publish-grades-toggle-container" class="hdr-pill-toggle d-none">
             <label class="toggle-switch">
@@ -256,7 +261,7 @@
         <!-- Dynamic Island Selector Bar -->
         <div class="student-selector-bar">
           <div class="selector-field" id="class-dropdown-wrapper">
-            <div class="di-dropdown-trigger" id="class-dropdown-trigger" onclick="toggleDiDropdown('class')">
+            <div class="di-dropdown-trigger" id="class-dropdown-trigger" onclick="toggleDiDropdown(event, 'class')">
               <span class="di-trigger-icon"><span class="material-symbols-rounded">class</span></span>
               <span class="di-trigger-label placeholder" id="class-trigger-label">Pilih Kelas</span>
               <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
@@ -267,7 +272,7 @@
           </div>
           <div class="selector-divider"></div>
           <div class="selector-field" id="name-dropdown-wrapper">
-            <div class="di-dropdown-trigger disabled" id="name-dropdown-trigger" onclick="toggleDiDropdown('name')">
+            <div class="di-dropdown-trigger disabled" id="name-dropdown-trigger" onclick="toggleDiDropdown(event, 'name')">
               <span class="di-trigger-icon"><span class="material-symbols-rounded">person</span></span>
               <span class="di-trigger-label placeholder" id="name-trigger-label">Pilih Nama Siswa</span>
               <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
@@ -305,7 +310,7 @@
             <button class="student-sub-tab-btn" onclick="switchStudentSubTab('portal')" id="btn-subtab-portal">
               <span class="material-symbols-rounded" style="font-size:16px;">smartphone</span> Portal Tugas & CBT
             </button>
-            <button class="student-sub-tab-btn" onclick="switchStudentSubTab('direktori')" id="btn-subtab-direktori">
+            <button class="student-sub-tab-btn d-none" onclick="switchStudentSubTab('direktori')" id="btn-subtab-direktori">
               <span class="material-symbols-rounded" style="font-size:16px;">folder_open</span> Direktori Tugas
             </button>
           </div>
@@ -513,65 +518,6 @@
 
       <!-- ==================== TAB 1: NILAI SISWA ==================== -->
       <div id="teacher-tab-nilai" class="teacher-tab-content" style="padding: 1.25rem; overflow-y: auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-          <div style="flex: 1;">
-            <!-- Metrics Cards -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; max-width: 800px;">
-              <!-- Card 1: Siswa -->
-              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
-                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(99, 102, 241, 0.15); display: flex; align-items: center; justify-content: center;">
-                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--indigo);">groups</span>
-                </div>
-                <div style="display: flex; flex-direction: column;">
-                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Siswa</span>
-                  <span id="td-metric-siswa" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0</span>
-                </div>
-              </div>
-              
-              <!-- Card 2: Rata-Rata -->
-              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
-                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(168, 85, 247, 0.15); display: flex; align-items: center; justify-content: center;">
-                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--violet);">trending_up</span>
-                </div>
-                <div style="display: flex; flex-direction: column;">
-                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Rata-Rata</span>
-                  <span id="td-metric-rata" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0.0</span>
-                </div>
-              </div>
-
-              <!-- Card 3: Lengkap -->
-              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
-                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); display: flex; align-items: center; justify-content: center;">
-                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--success);">check_circle</span>
-                </div>
-                <div style="display: flex; flex-direction: column;">
-                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Lengkap</span>
-                  <div style="display: flex; align-items: baseline; gap: 0.1rem;">
-                    <span id="td-metric-tugas" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0</span>
-                    <span style="font-size: 0.9rem; font-weight: 800; color: var(--text-primary);">%</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Card 4: Blm Lengkap -->
-              <div class="glass-card" style="padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; background: var(--bg-card-solid); border: 1px solid var(--border);">
-                <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(244, 63, 94, 0.15); display: flex; align-items: center; justify-content: center;">
-                  <span class="material-symbols-rounded" style="font-size: 20px; color: var(--danger);">error</span>
-                </div>
-                <div style="display: flex; flex-direction: column;">
-                  <span style="color: var(--text-muted); font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.1rem;">Blm Lengkap</span>
-                  <span id="td-metric-belum" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); line-height: 1;">0</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div>
-            <button onclick="exportGradesToExcel()" class="ui-outline-btn">
-              <span class="material-symbols-rounded" style="font-size: 16px;">table_chart</span>
-              Ekspor Excel
-            </button>
-          </div>
-        </div>
 
         <!-- Split Layout workspace V7 -->
         <div class="dashboard-layout">
@@ -1002,7 +948,7 @@
               </div>
               <div class="student-selector-bar config-session-bar">
                 <div class="selector-field" id="config-academic-year-dropdown-wrapper">
-                  <div class="di-dropdown-trigger" id="config-academic-year-dropdown-trigger" onclick="toggleDiDropdown('config-academic-year')">
+                  <div class="di-dropdown-trigger" id="config-academic-year-dropdown-trigger" onclick="toggleDiDropdown(event, 'config-academic-year')">
                     <span class="di-trigger-icon"><span class="material-symbols-rounded">event</span></span>
                     <span class="di-trigger-label" id="config-academic-year-trigger-label">2026/2027</span>
                     <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
@@ -1017,7 +963,7 @@
                 </div>
                 <div class="selector-divider"></div>
                 <div class="selector-field" id="config-semester-dropdown-wrapper">
-                  <div class="di-dropdown-trigger" id="config-semester-dropdown-trigger" onclick="toggleDiDropdown('config-semester')">
+                  <div class="di-dropdown-trigger" id="config-semester-dropdown-trigger" onclick="toggleDiDropdown(event, 'config-semester')">
                     <span class="di-trigger-icon"><span class="material-symbols-rounded">timelapse</span></span>
                     <span class="di-trigger-label" id="config-semester-trigger-label">Ganjil (I)</span>
                     <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
@@ -1238,7 +1184,7 @@
           <div class="form-group" style="text-align: left;">
             <label style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin-bottom:0.35rem; display:block;">PILIH AKUN GURU:</label>
             <div class="selector-field" id="role-dropdown-wrapper" style="width: 100%;">
-              <div class="di-dropdown-trigger" id="role-dropdown-trigger" onclick="toggleDiDropdown('role')" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--r-md); height: 44px; padding: 0.5rem 1rem;">
+              <div class="di-dropdown-trigger" id="role-dropdown-trigger" onclick="toggleDiDropdown(event, 'role')" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: var(--r-md); height: 44px; padding: 0.5rem 1rem;">
                 <span class="di-trigger-icon" style="color: var(--secondary);"><span class="material-symbols-rounded">person</span></span>
                 <span class="di-trigger-label placeholder" id="role-trigger-label" style="font-size:0.95rem; font-family:var(--font-heading); font-weight:600;">-- Pilih Nama Anda --</span>
                 <span class="di-trigger-chevron"><span class="material-symbols-rounded">expand_more</span></span>
@@ -1640,6 +1586,24 @@
     </div>
   </div>
 
+  <!-- ==============================================
+       STUDENT CHAPTER DETAIL MODAL
+       ============================================== -->
+  <div id="student-chapter-detail-modal" class="modal-overlay" style="display:none; z-index: 2000;">
+    <div class="modal-content" style="max-width: 500px; max-height: 80vh; display: flex; flex-direction: column; background: var(--bg-card-solid); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 1.5rem;">
+      <h3 style="margin-bottom: 1rem; color: var(--text-primary); font-family: var(--font-heading); font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center;">
+        <span id="student-chapter-detail-title">Detail Bab</span>
+        <button onclick="closeStudentChapterDetailModal()" style="background:none; border:none; color:var(--text-secondary); cursor:pointer; font-size:1.2rem;">&times;</button>
+      </h3>
+      <div id="student-chapter-detail-body" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <!-- Tasks will be injected here -->
+      </div>
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button class="action-btn secondary-btn" onclick="closeStudentChapterDetailModal()">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Supabase CDN and Logic -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabaseClient.js"></script>
@@ -1647,6 +1611,6 @@
   <script src="auth.js?v=4"></script>
 
   <!-- Application Logic -->
-  <script src="app_core.js?v=29"></script>
+  <script src="app_core.js?v=43"></script>
 </body>
 </html>
