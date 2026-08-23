@@ -9,10 +9,4 @@
       "source": "/(.*)",
       "destination": "/api/index.js"
     }
-  ],
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "{routes,lib,middleware,data}/**"
-    }
-  }
 }
