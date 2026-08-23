@@ -11,7 +11,7 @@
     }
   ],
   "functions": {
-    "api/**/*.js": {
+    "api/index.js": {
       "includeFiles": "{routes,lib,middleware,data}/**"
     }
   }
