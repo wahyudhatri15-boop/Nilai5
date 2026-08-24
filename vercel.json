@@ -9,4 +9,5 @@
       "source": "/(.*)",
       "destination": "/api/index.js"
     }
+  ]
 }
